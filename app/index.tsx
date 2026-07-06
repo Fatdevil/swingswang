@@ -5,7 +5,7 @@
  * Hero landing + video selection + analysis trigger.
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +15,7 @@ import { Card } from '../src/components/ui/Card';
 import { isProcessing, statusDisplayText } from '../src/types/pose';
 import { formatDuration, formatResolution, formatFileSize } from '../src/types/video';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
+import { getLocalDateString, calculateDaysDiff } from '../src/utils/streak';
 export default function HomeScreen() {
   const router = useRouter();
   const {
@@ -26,6 +27,10 @@ export default function HomeScreen() {
     resetAnalysis,
     history,
     clearHistory,
+    streakCount,
+    lastActiveDate,
+    isStreakLoaded,
+    setStreak,
   } = useAnalysis();
 
   const handleAnalyze = async () => {
@@ -39,10 +44,45 @@ export default function HomeScreen() {
     ? (history.reduce((a, b) => a + b, 0) / history.length).toFixed(1)
     : null;
 
+  // Real-time daily streak checking
+  useEffect(() => {
+    if (!isStreakLoaded) return;
+
+    const checkStreak = () => {
+      const todayStr = getLocalDateString();
+      const lastActive = lastActiveDate;
+
+      // 1. New user (first log in)
+      if (!lastActive) {
+        setStreak(1, todayStr);
+        return;
+      }
+
+      const diff = calculateDaysDiff(lastActive, todayStr);
+
+      // 2. Next day (clock struck midnight or opened next day)
+      if (diff === 1) {
+        setStreak(streakCount + 1, todayStr);
+      } 
+      // 3. Broken streak (more than 1 day missed)
+      else if (diff > 1) {
+        setStreak(1, todayStr);
+      }
+      // If diff === 0, it's the same day, so do nothing.
+    };
+
+    // Check immediately upon rendering
+    checkStreak();
+
+    // Check periodically (every 5 seconds) for real-time midnight transition
+    const timer = setInterval(checkStreak, 5000);
+    return () => clearInterval(timer);
+  }, [isStreakLoaded, streakCount, lastActiveDate, setStreak]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        {/* Top Widgets Row (Average Score & Future Slot) */}
+        {/* Top Widgets Row (Average Score & Streak Slot) */}
         <View style={styles.topRow}>
           <View style={styles.scoreBox}>
             <Text style={styles.scoreLabel}>AVG SCORE</Text>
@@ -61,9 +101,17 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <View style={styles.placeholderBox}>
-            <Ionicons name="add" size={24} color={COLORS.textTertiary} style={{ opacity: 0.3 }} />
-            <Text style={styles.placeholderText}>Reserved Slot</Text>
+          <View style={styles.streakBox}>
+            <Text style={styles.streakLabel}>DAILY STREAK</Text>
+            <View style={styles.streakRow}>
+              <Ionicons name="flame" size={24} color={COLORS.accent} />
+              <Text style={styles.streakValue}>
+                {streakCount} {streakCount === 1 ? 'Day' : 'Days'}
+              </Text>
+            </View>
+            <Text style={styles.streakSubtitle}>
+              {streakCount > 0 ? 'Keep it going!' : 'Log in tomorrow'}
+            </Text>
           </View>
         </View>
 
@@ -212,22 +260,40 @@ const styles = StyleSheet.create({
   clearBtn: {
     padding: 2,
   },
-  placeholderBox: {
+  streakBox: {
     flex: 1,
+    backgroundColor: COLORS.card,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderStyle: 'dashed',
-    borderRadius: BORDER_RADIUS.lg,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: SPACING.md,
+    justifyContent: 'center',
   },
-  placeholderText: {
+  streakLabel: {
+    fontFamily: FONT_FAMILY,
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.semibold as any,
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  streakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  streakValue: {
+    fontFamily: FONT_FAMILY,
+    color: COLORS.accent, // emerald green flame/count
+    fontSize: FONT_SIZE.xl,
+    fontWeight: FONT_WEIGHT.bold as any,
+  },
+  streakSubtitle: {
     fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.xs,
     marginTop: 4,
-    opacity: 0.7,
   },
   actionSection: {
     flex: 1,

@@ -91,6 +91,11 @@ export function useAnalysis() {
     dispatch({ type: 'CLEAR_HISTORY' });
   }, [dispatch]);
 
+  /** Set streak data directly. */
+  const setStreak = useCallback((streakCount: number, lastActiveDate: string) => {
+    dispatch({ type: 'SET_STREAK', payload: { streakCount, lastActiveDate } });
+  }, [dispatch]);
+
   return {
     videoSource: state.videoSource,
     status: state.status,
@@ -98,10 +103,14 @@ export function useAnalysis() {
     analysisResult: state.analysisResult,
     debugMode: state.debugMode,
     history: state.history,
+    streakCount: state.streakCount,
+    lastActiveDate: state.lastActiveDate,
+    isStreakLoaded: state.isStreakLoaded,
     selectAndLoadVideo,
     startAnalysis,
     resetAnalysis,
     toggleDebug,
     clearHistory,
+    setStreak,
   };
 }
