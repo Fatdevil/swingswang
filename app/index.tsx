@@ -245,18 +245,26 @@ export default function HomeScreen() {
                   {friends.length === 0 ? (
                     <Text style={styles.emptyFriendsText}>No friends added yet</Text>
                   ) : (
-                    friends.map((friend, idx) => (
-                      <View key={friend.code + idx} style={styles.friendRow}>
-                        <View>
-                          <Text style={styles.friendName}>{friend.name}</Text>
-                          <Text style={styles.friendCode}>{friend.code}</Text>
-                        </View>
-                        <View style={styles.friendStreak}>
-                          <Ionicons name="flame" size={16} color={streakColor} />
-                          <Text style={styles.friendStreakText}>{friend.streak} d</Text>
-                        </View>
-                      </View>
-                    ))
+                    <View style={styles.friendListContainer}>
+                      <ScrollView
+                        nestedScrollEnabled={true}
+                        style={styles.friendListScroll}
+                        showsVerticalScrollIndicator={true}
+                      >
+                        {friends.map((friend, idx) => (
+                          <View key={friend.code + idx} style={styles.friendRow}>
+                            <View>
+                              <Text style={styles.friendName}>{friend.name}</Text>
+                              <Text style={styles.friendCode}>{friend.code}</Text>
+                            </View>
+                            <View style={styles.friendStreak}>
+                              <Ionicons name="flame" size={16} color={streakColor} />
+                              <Text style={styles.friendStreakText}>{friend.streak} d</Text>
+                            </View>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    </View>
                   )}
                 </View>
               </ScrollView>
@@ -660,6 +668,18 @@ const styles = StyleSheet.create({
   },
   friendListSection: {
     marginBottom: SPACING.md,
+  },
+  friendListContainer: {
+    maxHeight: 160,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.card,
+    paddingHorizontal: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  friendListScroll: {
+    flexGrow: 0,
   },
   emptyFriendsText: {
     fontFamily: FONT_FAMILY,

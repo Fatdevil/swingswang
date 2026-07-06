@@ -171,17 +171,19 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
       const savedFriends = await loadFriendDataLocally();
       if (savedFriends) {
-        dispatch({ type: 'LOAD_FRIEND_DATA', payload: savedFriends });
-      } else {
-        // Seed first code and default mock friends
-        const newCode = generateFriendCode();
-        const initialFriends: Friend[] = [
-          { name: 'Tiger Woods', code: 'TGWD-1997', streak: 45 },
-          { name: 'Nelly Korda', code: 'NKRD-2024', streak: 12 },
-        ];
+        // Filter out Tiger Woods and Nelly Korda immediately
+        const filteredFriends = savedFriends.friends.filter(
+          f => f.name !== 'Tiger Woods' && f.name !== 'Nelly Korda'
+        );
         dispatch({
           type: 'LOAD_FRIEND_DATA',
-          payload: { myCode: newCode, friends: initialFriends },
+          payload: { ...savedFriends, friends: filteredFriends },
+        });
+      } else {
+        const newCode = generateFriendCode();
+        dispatch({
+          type: 'LOAD_FRIEND_DATA',
+          payload: { myCode: newCode, friends: [] },
         });
       }
     }
