@@ -27,8 +27,10 @@ export default function HomeScreen() {
   } = useAnalysis();
 
   const handleAnalyze = async () => {
-    await startAnalysis();
-    router.push('/player');
+    const success = await startAnalysis();
+    if (success) {
+      router.push('/player');
+    }
   };
 
   return (

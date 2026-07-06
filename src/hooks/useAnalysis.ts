@@ -50,11 +50,11 @@ export function useAnalysis() {
     }
   }, [dispatch]);
 
-  /** Run the full analysis pipeline on the loaded video. */
-  const startAnalysis = useCallback(async () => {
+  /** Run the full analysis pipeline on the loaded video. Returns true on success. */
+  const startAnalysis = useCallback(async (): Promise<boolean> => {
     if (!state.videoSource) {
       Logger.video.warn('startAnalysis called without video source');
-      return;
+      return false;
     }
 
     try {
@@ -68,9 +68,11 @@ export function useAnalysis() {
       dispatch({ type: 'SET_RESULT', payload: result.analysisResult });
       dispatch({ type: 'SET_STATUS', payload: { type: 'completed' } });
 
+      return true;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       dispatch({ type: 'SET_STATUS', payload: { type: 'failed', error: msg } });
+      return false;
     }
   }, [state.videoSource, dispatch]);
 

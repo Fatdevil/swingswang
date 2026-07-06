@@ -42,7 +42,13 @@ type Action =
 function reducer(state: AnalysisState, action: Action): AnalysisState {
   switch (action.type) {
     case 'SET_VIDEO':
-      return { ...state, videoSource: action.payload, status: action.payload ? { type: 'ready' } : { type: 'idle' } };
+      return {
+        ...state,
+        videoSource: action.payload,
+        status: action.payload ? { type: 'ready' } : { type: 'idle' },
+        poseTimeline: null,
+        analysisResult: null,
+      };
     case 'SET_STATUS':
       return { ...state, status: action.payload };
     case 'SET_TIMELINE':

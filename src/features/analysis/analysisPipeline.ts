@@ -35,9 +35,10 @@ export async function runAnalysisPipeline(
 ): Promise<PipelineResult> {
   const pipelineTimer = new PerformanceTimer('analysisPipeline');
 
+  const engine = createPoseEngine();
+
   try {
     // 1. Initialize pose engine
-    const engine = createPoseEngine();
     await engine.initialize();
 
     // 2. Extract frames
@@ -108,8 +109,7 @@ export async function runAnalysisPipeline(
 
     const analysisResult = buildAnalysisResult(metadata, processing, poseSummary, metrics);
 
-    // Cleanup
-    engine.dispose();
+    // Note: engine.dispose() is called in finally block
 
     onStatus({ type: 'completed' });
 
@@ -126,5 +126,7 @@ export async function runAnalysisPipeline(
     Logger.pose.error('Pipeline failed', { error: errorMsg });
     onStatus({ type: 'failed', error: errorMsg });
     throw error;
+  } finally {
+    engine.dispose();
   }
 }
