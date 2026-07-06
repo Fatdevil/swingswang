@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
   friendsCard: {
     backgroundColor: COLORS.card,
     borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
+    padding: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
     width: '100%',
@@ -563,7 +563,7 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: '100%',
-    maxHeight: '65%',
+    maxHeight: '80%',
     backgroundColor: COLORS.surface,
     borderRadius: BORDER_RADIUS.xl,
     borderWidth: 1,
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   friendListContainer: {
-    maxHeight: 160,
+    maxHeight: 280,
     borderWidth: 1,
     borderColor: COLORS.divider,
     borderRadius: BORDER_RADIUS.md,
