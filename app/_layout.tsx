@@ -10,22 +10,18 @@ import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { AnalysisProvider } from '../src/context/AnalysisContext';
-import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
-import { COLORS, SPACING, FONT_SIZE } from '../src/constants/theme';
+import { COLORS, SPACING, FONT_SIZE, FONT_FAMILY } from '../src/constants/theme';
 import { useAnalysis } from '../src/hooks/useAnalysis';
 import { Pressable, View, StyleSheet, Modal, Text } from 'react-native';
 
 function NavigationLayout() {
   const { selectAndLoadVideo } = useAnalysis();
-  const { themeKey } = useTheme();
   const router = useRouter();
   const [menuVisible, setMenuVisible] = useState(false);
 
-  const statusBarColor = themeKey === 'black-white' ? 'light' : 'dark';
-
   return (
     <View style={{ flex: 1 }}>
-      <StatusBar style={statusBarColor} />
+      <StatusBar style="dark" />
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -36,7 +32,7 @@ function NavigationLayout() {
             height: 60,
             paddingBottom: 6,
           },
-          tabBarActiveTintColor: COLORS.textPrimary,
+          tabBarActiveTintColor: COLORS.accent, // Active tab is modern emerald green
           tabBarInactiveTintColor: COLORS.textTertiary,
           tabBarLabelStyle: {
             fontSize: 10,
@@ -76,7 +72,7 @@ function NavigationLayout() {
                   <Ionicons 
                     name="add" 
                     size={26} 
-                    color={menuVisible ? COLORS.textPrimary : COLORS.background} 
+                    color="#FFFFFF" // White plus icon
                   />
                 </View>
               </Pressable>
@@ -99,12 +95,6 @@ function NavigationLayout() {
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="bug-outline" size={size} color={color} />
             ),
-          }}
-        />
-        <Tabs.Screen
-          name="settings"
-          options={{
-            href: null,
           }}
         />
         {/* Hide screens that shouldn't appear in tabs */}
@@ -155,11 +145,9 @@ function NavigationLayout() {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <AnalysisProvider>
-        <NavigationLayout />
-      </AnalysisProvider>
-    </ThemeProvider>
+    <AnalysisProvider>
+      <NavigationLayout />
+    </AnalysisProvider>
   );
 }
 
@@ -173,12 +161,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.accent, // Emerald Green background
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#FFF',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -188,7 +176,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(15, 23, 42, 0.4)', // Dim dark overlay
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingBottom: 80, // Positions directly above the tab bar
@@ -202,12 +190,13 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
   },
   menuTitle: {
-    color: COLORS.textTertiary,
+    fontFamily: FONT_FAMILY,
+    color: COLORS.textSecondary,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1.5,
@@ -226,6 +215,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cardElevated,
   },
   menuItemText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textPrimary,
     fontSize: FONT_SIZE.sm,
     fontWeight: '600',
@@ -239,6 +229,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   menuItemTextDisabled: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.sm,
   },

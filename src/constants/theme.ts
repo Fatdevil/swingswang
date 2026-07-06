@@ -2,17 +2,56 @@
  * theme.ts
  * SwingSwang
  *
- * Minimal black/white theme with yin-yang inspiration.
- * Mobile-first, modern, balanced.
+ * Minimal light theme with white background and modern light green accents.
+ * Mobile-first, modern, clean contrast.
  */
 
-import { getActiveThemeColors } from '../context/ThemeContext';
+import { Platform } from 'react-native';
 
-export const COLORS = new Proxy({} as any, {
-  get(_, prop: string) {
-    const active = getActiveThemeColors();
-    return active[prop as keyof typeof active] || '#000000';
-  }
+export const COLORS = {
+  /** Primary background — crisp white. */
+  background: '#FFFFFF',
+  /** Slightly elevated surface. */
+  surface: '#F8FAFC',
+  /** Card backgrounds. */
+  card: '#F1F5F9',
+  /** Elevated card / active state. */
+  cardElevated: '#E2E8F0',
+  /** Primary text — Charcoal / Dark Grey. */
+  textPrimary: '#1F2937',
+  /** Secondary text — Medium Grey. */
+  textSecondary: '#4B5563',
+  /** Tertiary text — Light Grey. */
+  textTertiary: '#9CA3AF',
+  /** Primary accent — modern emerald green. */
+  accent: '#10B981',
+  /** Accent muted. */
+  accentMuted: '#34D399',
+  /** Success / reliable. */
+  success: '#10B981',
+  /** Warning / marginal. */
+  warning: '#F59E0B',
+  /** Error / not reliable. */
+  error: '#EF4444',
+  /** Info / processing. */
+  info: '#3B82F6',
+  /** Border — subtle. */
+  border: '#E2E8F0',
+  /** Divider line. */
+  divider: '#F1F5F9',
+  /** Skeleton overlay — light green bones. */
+  skeletonBone: 'rgba(16, 185, 129, 0.15)',
+  /** Skeleton joint. */
+  skeletonJoint: 'rgba(16, 185, 129, 0.4)',
+  /** Overlay background. */
+  overlay: 'rgba(15, 23, 42, 0.3)',
+} as const;
+
+/** System-native rounded font family selection. */
+export const FONT_FAMILY = Platform.select({
+  ios: 'Arial Rounded MT Bold',
+  android: 'sans-serif-rounded',
+  default: 'System',
 });
 
 export const SPACING = {

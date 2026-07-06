@@ -12,16 +12,14 @@ import { useAnalysis } from '../src/hooks/useAnalysis';
 import { SkeletonOverlay } from '../src/components/pose/SkeletonOverlay';
 import { Button } from '../src/components/ui/Button';
 import { Badge } from '../src/components/ui/Badge';
-import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../src/constants/theme';
+import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
 import { reliabilityColor } from '../src/types/metrics';
 import { reliabilityFromConfidence } from '../src/types/metrics';
-import { useTheme } from '../src/context/ThemeContext';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PLAYBACK_RATES = [0.25, 0.5, 1.0];
 
 export default function PlayerScreen() {
-  useTheme(); // Subscribe to theme changes
   const { videoSource, poseTimeline } = useAnalysis();
   const videoRef = useRef<Video>(null);
 
@@ -196,6 +194,7 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   timestamp: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.lg,
     fontWeight: FONT_WEIGHT.medium as any,
@@ -217,11 +216,13 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   frameInfoText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.xs,
     textAlign: 'center',
   },
   noDataText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.sm,
     textAlign: 'center',
@@ -234,12 +235,14 @@ const styles = StyleSheet.create({
     padding: SPACING.xl,
   },
   emptyTitle: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textPrimary,
     fontSize: FONT_SIZE.xl,
     fontWeight: FONT_WEIGHT.bold as any,
     marginBottom: SPACING.sm,
   },
   emptyText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.md,
     textAlign: 'center',

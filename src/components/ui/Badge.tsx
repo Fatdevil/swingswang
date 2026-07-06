@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../../constants/theme';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../../constants/theme';
 
 interface BadgeProps {
   text: string;
@@ -31,6 +31,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   text: {
+    fontFamily: FONT_FAMILY,
     fontSize: FONT_SIZE.xs,
     fontWeight: FONT_WEIGHT.semibold as any,
     textTransform: 'uppercase',

@@ -13,11 +13,8 @@ import { Card } from '../src/components/ui/Card';
 import { Button } from '../src/components/ui/Button';
 import { ProgressBar } from '../src/components/ui/ProgressBar';
 import { exportToJSON, copyToClipboard } from '../src/features/analysis/analysisExporter';
-import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../src/constants/theme';
-import { useTheme } from '../src/context/ThemeContext';
-
+import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
 export default function ResultsScreen() {
-  useTheme(); // Subscribe to theme changes
   const { analysisResult } = useAnalysis();
 
   if (!analysisResult) {
@@ -150,28 +147,33 @@ const styles = StyleSheet.create({
     padding: SPACING.xl,
   },
   emptyTitle: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textPrimary,
     fontSize: FONT_SIZE.xl,
     fontWeight: FONT_WEIGHT.bold as any,
     marginBottom: SPACING.sm,
   },
   emptyText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.md,
     textAlign: 'center',
   },
   title: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textPrimary,
     fontSize: FONT_SIZE.xxl,
     fontWeight: FONT_WEIGHT.bold as any,
     marginTop: SPACING.xl,
   },
   subtitle: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.xs,
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.xs,
     fontWeight: FONT_WEIGHT.semibold as any,
@@ -185,10 +187,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   statLabel: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.sm,
   },
   statValue: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.sm,
     fontVariant: ['tabular-nums'],
@@ -197,6 +201,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
   },
   warningText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.warning,
     fontSize: FONT_SIZE.xs,
     lineHeight: 18,

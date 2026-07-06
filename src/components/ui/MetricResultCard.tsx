@@ -12,7 +12,7 @@ import { MetricResult, reliabilityColor, reliabilityLabel, ReliabilityStatus } f
 import { Card } from './Card';
 import { Badge } from './Badge';
 import { ProgressBar } from './ProgressBar';
-import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../../constants/theme';
+import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../../constants/theme';
 
 interface MetricResultCardProps {
   result: MetricResult;
@@ -128,6 +128,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   name: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textPrimary,
     fontSize: FONT_SIZE.md,
     fontWeight: FONT_WEIGHT.semibold as any,
@@ -139,16 +140,19 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
   },
   value: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textPrimary,
     fontSize: FONT_SIZE.xxl,
     fontWeight: FONT_WEIGHT.bold as any,
     fontVariant: ['tabular-nums'],
   },
   unit: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.sm,
   },
   noValue: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.lg,
     fontStyle: 'italic',
@@ -166,6 +170,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
   warningText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.warning,
     fontSize: FONT_SIZE.xs,
     flex: 1,
@@ -177,6 +182,7 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.divider,
   },
   sectionTitle: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.xs,
     fontWeight: FONT_WEIGHT.semibold as any,
@@ -186,6 +192,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   explanation: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.sm,
     lineHeight: 20,
@@ -196,15 +203,18 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
   detailLabel: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.sm,
   },
   detailValue: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.sm,
     fontVariant: ['tabular-nums'],
   },
   limitation: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.xs,
     lineHeight: 18,

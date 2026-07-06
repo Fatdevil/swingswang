@@ -12,11 +12,8 @@ import { Card } from '../src/components/ui/Card';
 import { Button } from '../src/components/ui/Button';
 import { getRecentLogs, LogEntry, LogLevel } from '../src/utils/logger';
 import { LANDMARK_NAMES, LandmarkID } from '../src/types/landmarks';
-import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../src/constants/theme';
-import { useTheme } from '../src/context/ThemeContext';
-
+import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
 export default function DebugScreen() {
-  useTheme(); // Subscribe to theme changes
   const { analysisResult, poseTimeline, status, videoSource } = useAnalysis();
   const [showLogs, setShowLogs] = useState(false);
   const [showRawJSON, setShowRawJSON] = useState(false);
@@ -148,6 +145,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xxl * 2,
   },
   title: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textPrimary,
     fontSize: FONT_SIZE.xxl,
     fontWeight: FONT_WEIGHT.bold as any,

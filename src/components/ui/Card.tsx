@@ -7,7 +7,7 @@
 
 import React, { type ReactNode } from 'react';
 import { View, Text, StyleSheet, type ViewStyle } from 'react-native';
-import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../../constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../../constants/theme';
 
 interface CardProps {
   children: ReactNode;
@@ -38,6 +38,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.divider,
   },
   title: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.xs,
     fontWeight: FONT_WEIGHT.semibold as any,

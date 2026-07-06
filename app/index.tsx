@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAnalysis } from '../src/hooks/useAnalysis';
@@ -14,12 +14,9 @@ import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { isProcessing, statusDisplayText } from '../src/types/pose';
 import { formatDuration, formatResolution, formatFileSize } from '../src/types/video';
-import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../src/constants/theme';
-import { useTheme } from '../src/context/ThemeContext';
-
+import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
 export default function HomeScreen() {
   const router = useRouter();
-  useTheme(); // Subscribe to theme changes
   const {
     videoSource,
     status,
@@ -38,14 +35,6 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Floating Settings Button */}
-      <Pressable
-        onPress={() => router.push('/settings')}
-        style={styles.settingsButton}
-      >
-        <Ionicons name="settings-outline" size={24} color={COLORS.textPrimary} />
-      </Pressable>
-
       <View style={styles.content}>
         {/* Hero */}
         <View style={styles.heroSection}>
@@ -168,6 +157,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xxl * 2,
   },
   heroTitle: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textPrimary,
     fontSize: FONT_SIZE.hero + 12,
     fontWeight: FONT_WEIGHT.black as any,
@@ -175,6 +165,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   heroTagline: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.md,
     lineHeight: 24,
@@ -184,6 +175,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   statusText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.sm,
     textAlign: 'center',
@@ -198,15 +190,18 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   metaLabel: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.sm,
   },
   metaValue: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.sm,
     fontVariant: ['tabular-nums'],
   },
   completeText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.success,
     fontSize: FONT_SIZE.sm,
   },
@@ -217,6 +212,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   version: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.xs,
     textAlign: 'center',
@@ -224,6 +220,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   instructionText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.md,
     lineHeight: 22,
@@ -232,14 +229,8 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xl,
   },
   plusSymbol: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textPrimary,
     fontWeight: 'bold',
-  },
-  settingsButton: {
-    position: 'absolute',
-    top: SPACING.md,
-    right: SPACING.lg,
-    zIndex: 10,
-    padding: SPACING.xs,
   },
 });

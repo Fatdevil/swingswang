@@ -14,7 +14,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../../constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../../constants/theme';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 
@@ -79,6 +79,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   text: {
+    fontFamily: FONT_FAMILY,
     fontSize: FONT_SIZE.md,
     fontWeight: FONT_WEIGHT.semibold as TextStyle['fontWeight'],
     letterSpacing: 0.5,
@@ -93,12 +94,12 @@ const styles = StyleSheet.create({
 
 const variantStyles: Record<ButtonVariant, ViewStyle> = {
   primary: {
-    backgroundColor: COLORS.textPrimary,
+    backgroundColor: COLORS.accent, // Emerald Green background for primary buttons
   },
   secondary: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: COLORS.textPrimary,
+    borderColor: COLORS.accent, // Emerald Green border for secondary buttons
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -107,10 +108,10 @@ const variantStyles: Record<ButtonVariant, ViewStyle> = {
 
 const variantTextStyles: Record<ButtonVariant, TextStyle> = {
   primary: {
-    color: COLORS.background,
+    color: '#FFFFFF', // White text on emerald green background
   },
   secondary: {
-    color: COLORS.textPrimary,
+    color: COLORS.accent, // Emerald Green text for secondary buttons
   },
   ghost: {
     color: COLORS.textSecondary,

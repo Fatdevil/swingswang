@@ -13,6 +13,7 @@ import {
   SPACING,
   FONT_SIZE,
   FONT_WEIGHT,
+  FONT_FAMILY,
 } from '../../constants/theme';
 import {
   VideoMetadata,
@@ -103,11 +104,13 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   label: {
+    fontFamily: FONT_FAMILY,
     fontSize: FONT_SIZE.sm,
     color: COLORS.textSecondary,
     fontWeight: FONT_WEIGHT.medium,
   },
   value: {
+    fontFamily: FONT_FAMILY,
     fontSize: FONT_SIZE.sm,
     color: COLORS.textPrimary,
     fontWeight: FONT_WEIGHT.semibold,

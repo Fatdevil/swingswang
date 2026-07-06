@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, type ViewStyle } from 'react-native';
-import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZE } from '../../constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZE, FONT_FAMILY } from '../../constants/theme';
 
 interface ProgressBarProps {
   progress: number; // 0–1
@@ -20,7 +20,7 @@ interface ProgressBarProps {
 export function ProgressBar({
   progress,
   label,
-  color = COLORS.textPrimary,
+  color = COLORS.accent,
   showPercent = true,
   style,
 }: ProgressBarProps) {
@@ -56,10 +56,12 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   label: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.xs,
   },
   percent: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.xs,
   },

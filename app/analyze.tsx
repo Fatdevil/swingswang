@@ -10,11 +10,8 @@ import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-n
 import { useAnalysis } from '../src/hooks/useAnalysis';
 import { ProgressBar } from '../src/components/ui/ProgressBar';
 import { statusDisplayText, statusProgress } from '../src/types/pose';
-import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../src/constants/theme';
-import { useTheme } from '../src/context/ThemeContext';
-
+import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
 export default function AnalyzeScreen() {
-  useTheme(); // Subscribe to theme changes
   const { status } = useAnalysis();
   const progress = statusProgress(status);
 
@@ -58,6 +55,7 @@ const styles = StyleSheet.create({
     padding: SPACING.xl,
   },
   statusText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textPrimary,
     fontSize: FONT_SIZE.lg,
     fontWeight: FONT_WEIGHT.semibold as any,
@@ -69,11 +67,13 @@ const styles = StyleSheet.create({
     marginTop: SPACING.lg,
   },
   detailText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.textTertiary,
     fontSize: FONT_SIZE.sm,
     marginTop: SPACING.sm,
   },
   errorText: {
+    fontFamily: FONT_FAMILY,
     color: COLORS.error,
     fontSize: FONT_SIZE.sm,
     marginTop: SPACING.md,
