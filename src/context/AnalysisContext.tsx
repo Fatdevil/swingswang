@@ -13,6 +13,13 @@ import { PoseTimeline } from '../features/timeline/PoseTimeline';
 import { calculateSwingScore } from '../utils/score';
 import { saveHistoryLocally, loadHistoryLocally } from '../utils/history';
 import { saveStreakLocally, loadStreakLocally, StreakData } from '../utils/streak';
+import {
+  saveFriendDataLocally,
+  loadFriendDataLocally,
+  generateFriendCode,
+  Friend,
+  FriendState,
+} from '../utils/friend';
 
 // ─── State ──────────────────────────────────────────────────────────
 
@@ -27,6 +34,9 @@ export interface AnalysisState {
   streakCount: number;
   lastActiveDate: string;
   isStreakLoaded: boolean;
+  myCode: string;
+  friends: Friend[];
+  isFriendDataLoaded: boolean;
 }
 
 const initialState: AnalysisState = {
@@ -40,6 +50,9 @@ const initialState: AnalysisState = {
   streakCount: 0,
   lastActiveDate: '',
   isStreakLoaded: false,
+  myCode: '',
+  friends: [],
+  isFriendDataLoaded: false,
 };
 
 // ─── Actions ────────────────────────────────────────────────────────
@@ -53,6 +66,8 @@ type Action =
   | { type: 'CLEAR_HISTORY' }
   | { type: 'LOAD_STREAK'; payload: StreakData }
   | { type: 'SET_STREAK'; payload: StreakData }
+  | { type: 'LOAD_FRIEND_DATA'; payload: FriendState }
+  | { type: 'ADD_FRIEND'; payload: Friend }
   | { type: 'TOGGLE_DEBUG' }
   | { type: 'RESET' };
 
@@ -98,6 +113,18 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         streakCount: action.payload.streakCount,
         lastActiveDate: action.payload.lastActiveDate,
       };
+    case 'LOAD_FRIEND_DATA':
+      return {
+        ...state,
+        myCode: action.payload.myCode,
+        friends: action.payload.friends,
+        isFriendDataLoaded: true,
+      };
+    case 'ADD_FRIEND':
+      return {
+        ...state,
+        friends: [...state.friends, action.payload],
+      };
     case 'TOGGLE_DEBUG':
       return { ...state, debugMode: !state.debugMode };
     case 'RESET':
@@ -108,6 +135,9 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         streakCount: state.streakCount,
         lastActiveDate: state.lastActiveDate,
         isStreakLoaded: state.isStreakLoaded,
+        myCode: state.myCode,
+        friends: state.friends,
+        isFriendDataLoaded: state.isFriendDataLoaded,
       };
     default:
       return state;
@@ -126,7 +156,7 @@ const AnalysisContext = createContext<AnalysisContextValue | null>(null);
 export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  // Load history and streak at startup
+  // Load history, streak, and friends at startup
   useEffect(() => {
     async function init() {
       const savedHistory = await loadHistoryLocally();
@@ -136,8 +166,23 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       if (savedStreak) {
         dispatch({ type: 'LOAD_STREAK', payload: savedStreak });
       } else {
-        // First login ever: trigger streak loading with empty state (which will get set to 1 day)
         dispatch({ type: 'LOAD_STREAK', payload: { streakCount: 0, lastActiveDate: '' } });
+      }
+
+      const savedFriends = await loadFriendDataLocally();
+      if (savedFriends) {
+        dispatch({ type: 'LOAD_FRIEND_DATA', payload: savedFriends });
+      } else {
+        // Seed first code and default mock friends
+        const newCode = generateFriendCode();
+        const initialFriends: Friend[] = [
+          { name: 'Tiger Woods', code: 'TGWD-1997', streak: 45 },
+          { name: 'Nelly Korda', code: 'NKRD-2024', streak: 12 },
+        ];
+        dispatch({
+          type: 'LOAD_FRIEND_DATA',
+          payload: { myCode: newCode, friends: initialFriends },
+        });
       }
     }
     init();
@@ -159,6 +204,16 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       });
     }
   }, [state.streakCount, state.lastActiveDate, state.isStreakLoaded]);
+
+  // Save friends on changes
+  useEffect(() => {
+    if (state.isFriendDataLoaded) {
+      saveFriendDataLocally({
+        myCode: state.myCode,
+        friends: state.friends,
+      });
+    }
+  }, [state.myCode, state.friends, state.isFriendDataLoaded]);
 
   return (
     <AnalysisContext.Provider value={{ state, dispatch }}>

@@ -96,6 +96,11 @@ export function useAnalysis() {
     dispatch({ type: 'SET_STREAK', payload: { streakCount, lastActiveDate } });
   }, [dispatch]);
 
+  /** Add a friend directly. */
+  const addFriend = useCallback((name: string, code: string) => {
+    dispatch({ type: 'ADD_FRIEND', payload: { name, code, streak: 1 } });
+  }, [dispatch]);
+
   return {
     videoSource: state.videoSource,
     status: state.status,
@@ -106,11 +111,15 @@ export function useAnalysis() {
     streakCount: state.streakCount,
     lastActiveDate: state.lastActiveDate,
     isStreakLoaded: state.isStreakLoaded,
+    myCode: state.myCode,
+    friends: state.friends,
+    isFriendDataLoaded: state.isFriendDataLoaded,
     selectAndLoadVideo,
     startAnalysis,
     resetAnalysis,
     toggleDebug,
     clearHistory,
     setStreak,
+    addFriend,
   };
 }
