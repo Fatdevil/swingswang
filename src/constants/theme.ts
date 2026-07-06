@@ -47,12 +47,7 @@ export const COLORS = {
   overlay: 'rgba(15, 23, 42, 0.3)',
 } as const;
 
-/** System-native rounded font family selection. */
-export const FONT_FAMILY = Platform.select({
-  ios: 'Arial Rounded MT Bold',
-  android: 'sans-serif-rounded',
-  default: 'System',
-});
+export const FONT_FAMILY = 'KGRedHands';
 
 export const SPACING = {
   xs: 4,

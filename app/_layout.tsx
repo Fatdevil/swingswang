@@ -5,7 +5,7 @@
  * Root layout with tab navigation.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -13,6 +13,10 @@ import { AnalysisProvider } from '../src/context/AnalysisContext';
 import { COLORS, SPACING, FONT_SIZE, FONT_FAMILY } from '../src/constants/theme';
 import { useAnalysis } from '../src/hooks/useAnalysis';
 import { Pressable, View, StyleSheet, Modal, Text } from 'react-native';
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync();
 
 function NavigationLayout() {
   const { selectAndLoadVideo } = useAnalysis();
@@ -35,6 +39,7 @@ function NavigationLayout() {
           tabBarActiveTintColor: COLORS.accent, // Active tab is modern emerald green
           tabBarInactiveTintColor: COLORS.textTertiary,
           tabBarLabelStyle: {
+            fontFamily: FONT_FAMILY,
             fontSize: 10,
             fontWeight: '600',
             letterSpacing: 0.5,
@@ -144,6 +149,21 @@ function NavigationLayout() {
 }
 
 export default function RootLayout() {
+  const [loaded, error] = useFonts({
+    'KGRedHands': require('../assets/fonts/KGRedHands.ttf'),
+    'KGRedHandsOutline': require('../assets/fonts/KGRedHandsOutline.ttf'),
+  });
+
+  useEffect(() => {
+    if (loaded || error) {
+      SplashScreen.hideAsync();
+    }
+  }, [loaded, error]);
+
+  if (!loaded && !error) {
+    return null;
+  }
+
   return (
     <AnalysisProvider>
       <NavigationLayout />

@@ -36,28 +36,11 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        {/* Hero */}
-        <View style={styles.heroSection}>
-          <Text style={styles.heroTitle}>SWING{'\n'}SWANG</Text>
-          <Text style={styles.heroTagline}>
-            Analyze your swing.{'\n'}
-            Understand your movement.{'\n'}
-            Improve one swing at a time.
-          </Text>
-        </View>
-
         {/* Actions */}
         <View style={styles.actionSection}>
           {/* Status indicator */}
           {status.type !== 'idle' && status.type !== 'ready' && (
             <Text style={styles.statusText}>{statusDisplayText(status)}</Text>
-          )}
-
-          {/* No video loaded */}
-          {!videoSource && (
-            <Text style={styles.instructionText}>
-              Tap the <Text style={styles.plusSymbol}>+</Text> button below to select and analyze a golf swing.
-            </Text>
           )}
 
           {/* Video loaded — show info and process button */}
@@ -151,25 +134,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: SPACING.lg,
-    justifyContent: 'space-between',
-  },
-  heroSection: {
-    marginTop: SPACING.xxl * 2,
-  },
-  heroTitle: {
-    fontFamily: FONT_FAMILY,
-    color: COLORS.textPrimary,
-    fontSize: FONT_SIZE.hero + 12,
-    fontWeight: FONT_WEIGHT.black as any,
-    lineHeight: 52,
-    letterSpacing: 2,
-  },
-  heroTagline: {
-    fontFamily: FONT_FAMILY,
-    color: COLORS.textTertiary,
-    fontSize: FONT_SIZE.md,
-    lineHeight: 24,
-    marginTop: SPACING.md,
+    justifyContent: 'center',
   },
   actionSection: {
     marginBottom: SPACING.xl,
