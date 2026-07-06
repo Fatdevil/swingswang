@@ -86,15 +86,22 @@ export function useAnalysis() {
     dispatch({ type: 'TOGGLE_DEBUG' });
   }, [dispatch]);
 
+  /** Clear swing history. */
+  const clearHistory = useCallback(() => {
+    dispatch({ type: 'CLEAR_HISTORY' });
+  }, [dispatch]);
+
   return {
     videoSource: state.videoSource,
     status: state.status,
     poseTimeline: state.poseTimeline,
     analysisResult: state.analysisResult,
     debugMode: state.debugMode,
+    history: state.history,
     selectAndLoadVideo,
     startAnalysis,
     resetAnalysis,
     toggleDebug,
+    clearHistory,
   };
 }

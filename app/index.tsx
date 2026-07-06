@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAnalysis } from '../src/hooks/useAnalysis';
@@ -14,7 +14,7 @@ import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { isProcessing, statusDisplayText } from '../src/types/pose';
 import { formatDuration, formatResolution, formatFileSize } from '../src/types/video';
-import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
 export default function HomeScreen() {
   const router = useRouter();
   const {
@@ -24,6 +24,8 @@ export default function HomeScreen() {
     selectAndLoadVideo,
     startAnalysis,
     resetAnalysis,
+    history,
+    clearHistory,
   } = useAnalysis();
 
   const handleAnalyze = async () => {
@@ -33,9 +35,38 @@ export default function HomeScreen() {
     }
   };
 
+  const averageScore = history.length > 0
+    ? (history.reduce((a, b) => a + b, 0) / history.length).toFixed(1)
+    : null;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
+        {/* Top Widgets Row (Average Score & Future Slot) */}
+        <View style={styles.topRow}>
+          <View style={styles.scoreBox}>
+            <Text style={styles.scoreLabel}>AVG SCORE</Text>
+            <Text style={styles.scoreValue}>
+              {averageScore !== null ? `${averageScore}/10` : '-/10'}
+            </Text>
+            <View style={styles.scoreFooter}>
+              <Text style={styles.scoreSubtitle}>
+                {history.length} {history.length === 1 ? 'swing' : 'swings'}
+              </Text>
+              {history.length > 0 && (
+                <Pressable onPress={clearHistory} style={styles.clearBtn}>
+                  <Ionicons name="trash-outline" size={14} color={COLORS.error} />
+                </Pressable>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.placeholderBox}>
+            <Ionicons name="add" size={24} color={COLORS.textTertiary} style={{ opacity: 0.3 }} />
+            <Text style={styles.placeholderText}>Reserved Slot</Text>
+          </View>
+        </View>
+
         {/* Actions */}
         <View style={styles.actionSection}>
           {/* Status indicator */}
@@ -134,10 +165,74 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.xl,
+    justifyContent: 'space-between',
+  },
+  topRow: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    marginTop: SPACING.md,
+    width: '100%',
+  },
+  scoreBox: {
+    flex: 1,
+    backgroundColor: COLORS.card,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
     justifyContent: 'center',
   },
+  scoreLabel: {
+    fontFamily: FONT_FAMILY,
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.semibold as any,
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  scoreValue: {
+    fontFamily: FONT_FAMILY,
+    color: COLORS.accent, // modern light green
+    fontSize: FONT_SIZE.xxl,
+    fontWeight: FONT_WEIGHT.bold as any,
+  },
+  scoreFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginTop: 4,
+  },
+  scoreSubtitle: {
+    fontFamily: FONT_FAMILY,
+    color: COLORS.textTertiary,
+    fontSize: FONT_SIZE.xs,
+  },
+  clearBtn: {
+    padding: 2,
+  },
+  placeholderBox: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    borderRadius: BORDER_RADIUS.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.md,
+  },
+  placeholderText: {
+    fontFamily: FONT_FAMILY,
+    color: COLORS.textTertiary,
+    fontSize: FONT_SIZE.xs,
+    marginTop: 4,
+    opacity: 0.7,
+  },
   actionSection: {
-    marginBottom: SPACING.xl,
+    flex: 1,
+    justifyContent: 'center',
+    width: '100%',
   },
   statusText: {
     fontFamily: FONT_FAMILY,
