@@ -1,56 +1,124 @@
-# Welcome to your Expo app 👋
+# Swing Swang
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**AI-Powered Golf Swing Analysis — Phase 0 Technical Proof of Concept**
 
-## Get started
+A cross-platform mobile application that analyzes golf swings using real pose estimation to measure body movement patterns.
 
-1. Install dependencies
+## What This Is
 
-   ```bash
-   npm install
-   ```
+Phase 0 proves the core technical pipeline:
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+Open app → Import video → Play video → Extract frames → Run pose estimation
+→ Show skeleton overlay → Calculate metrics → Display real results
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Every displayed result comes from actual video analysis. No fake AI. No hard-coded scores.
 
-### Other setup steps
+## Technology Stack
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+| Layer | Technology |
+|-------|-----------|
+| Framework | React Native + Expo |
+| Language | TypeScript |
+| Navigation | Expo Router |
+| Pose Estimation | ExecuTorch (device) / Mock (development) |
+| Video Playback | expo-av |
+| Video Frames | expo-video thumbnails |
+| Skeleton Overlay | react-native-svg |
+| State | React Context + useReducer |
 
-## Learn more
+## Getting Started
 
-To learn more about developing your project with Expo, look at the following resources:
+### Prerequisites
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- Node.js 22+
+- npm 11+
+- Expo CLI: `npx expo` (no global install needed)
 
-## Join the community
+### Install
 
-Join our community of developers creating universal apps.
+```bash
+cd SwingSwang
+npm install
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Development (Windows)
+
+```bash
+npx expo start
+```
+
+This starts the Expo dev server. For UI development, use:
+- **Web preview**: Press `w` — limited functionality but great for layout work
+- **Android device**: Install EAS development build APK, then scan QR code
+
+### Build for Android (requires Expo account)
+
+```bash
+npx eas-cli build --platform android --profile development
+```
+
+This builds in the cloud — no Android Studio needed.
+
+## Project Structure
+
+```
+SwingSwang/
+├── app/              # Expo Router screens (Home, Player, Results, Debug)
+├── src/
+│   ├── components/   # Reusable UI components
+│   ├── features/     # Core logic modules
+│   │   ├── video/    # Video import + frame extraction
+│   │   ├── pose/     # Pose estimation engine (adapter pattern)
+│   │   ├── timeline/ # Timestamped pose data
+│   │   ├── metrics/  # Movement measurements (3 metrics)
+│   │   ├── confidence/ # Reliability scoring
+│   │   └── analysis/ # Pipeline orchestration + export
+│   ├── hooks/        # React hooks
+│   ├── types/        # TypeScript type definitions
+│   ├── utils/        # Pure geometry, math, coordinates
+│   └── constants/    # Theme, config, skeleton connections
+├── tests/            # Jest tests
+└── docs/             # Technical documentation
+```
+
+## Three Phase 0 Metrics
+
+1. **Head Movement** — Normalized head displacement from address position (shoulder-width units)
+2. **Torso Angle Change** — Maximum torso lean change from vertical (degrees)
+3. **Hip Movement Proxy** — Normalized lateral hip displacement (hip-width units)
+
+Each metric includes confidence scoring and honest limitation documentation.
+
+## Testing
+
+```bash
+npx jest
+```
+
+7 test files covering geometry, coordinates, metrics, confidence, and timeline.
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [PHASE_0_TECHNICAL_DECISIONS](docs/PHASE_0_TECHNICAL_DECISIONS.md) | Why we chose each technology |
+| [ARCHITECTURE](docs/ARCHITECTURE.md) | System architecture |
+| [KNOWN_LIMITATIONS](docs/KNOWN_LIMITATIONS.md) | Honest technical limitations |
+
+## What Phase 0 Does NOT Include
+
+- Final swing scores
+- Swing phase detection
+- Coaching feedback
+- Drill recommendations
+- Cloud processing
+- Authentication
+- Social features
+
+See [PHASE_1_RECOMMENDATIONS](docs/PHASE_1_RECOMMENDATIONS.md) for the roadmap.
+
+## Privacy
+
+All video processing happens on-device. No video data is uploaded to external servers.
