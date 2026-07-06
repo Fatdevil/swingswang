@@ -51,6 +51,17 @@ export default function HomeScreen() {
 
   const [modalVisible, setModalVisible] = useState(false);
   const [friendCodeInput, setFriendCodeInput] = useState('');
+  const [drillDone, setDrillDone] = useState(false);
+
+  const PRACTICE_TIPS = [
+    "Keep your spine steady. Spine angle stability is key to consistent strikes.",
+    "Tempo is everything. Focus on a smooth 3:1 swing rhythm.",
+    "Keep your head centered. Avoid swaying left or right during the backswing.",
+    "Hip motion should be a rotation, not a lateral slide.",
+    "Relax your hands. Heavy grip tension kills your clubhead speed."
+  ];
+  const todayIndex = new Date().getDay() % PRACTICE_TIPS.length;
+  const tipOfTheDay = PRACTICE_TIPS[todayIndex];
 
   const handleAnalyze = async () => {
     const success = await startAnalysis();
@@ -190,6 +201,63 @@ export default function HomeScreen() {
             </Text>
           </View>
         </View>
+
+        {/* Practice Hub Card (Fills the free space nicely when no active video/results) */}
+        {!videoSource && !analysisResult && (
+          <Card title="PRACTICE HUB" style={styles.practiceCard}>
+            {/* Daily Tip */}
+            <View style={styles.tipBox}>
+              <View style={styles.tipHeader}>
+                <Ionicons name="bulb" size={16} color={COLORS.warning} />
+                <Text style={styles.tipTitle}>TIP OF THE DAY</Text>
+              </View>
+              <Text style={styles.tipText}>{tipOfTheDay}</Text>
+            </View>
+
+            {/* Drills Checklist */}
+            <View style={styles.drillSection}>
+              <Text style={styles.drillTitle}>TODAY'S DRILLS</Text>
+              
+              {/* Drill 1: Active Streak */}
+              <View style={styles.drillRow}>
+                <Ionicons name="checkmark-circle" size={20} color={COLORS.accent} />
+                <Text style={[styles.drillText, styles.drillCompleted]}>
+                  Log in streak active ({streakCount}d)
+                </Text>
+              </View>
+
+              {/* Drill 2: Analyze Swing */}
+              <View style={styles.drillRow}>
+                <Ionicons 
+                  name={analysisResult ? "checkmark-circle" : "ellipse-outline"} 
+                  size={20} 
+                  color={analysisResult ? COLORS.accent : COLORS.textTertiary} 
+                />
+                <Text style={[
+                  styles.drillText, 
+                  analysisResult && styles.drillCompleted
+                ]}>
+                  Record or analyze a swing
+                </Text>
+              </View>
+
+              {/* Drill 3: Manual Practice Drill */}
+              <Pressable onPress={() => setDrillDone(!drillDone)} style={styles.drillRow}>
+                <Ionicons 
+                  name={drillDone ? "checkmark-circle" : "ellipse-outline"} 
+                  size={20} 
+                  color={drillDone ? COLORS.accent : COLORS.textTertiary} 
+                />
+                <Text style={[
+                  styles.drillText, 
+                  drillDone && styles.drillCompleted
+                ]}>
+                  Drill: 15 head-still practice rotations
+                </Text>
+              </Pressable>
+            </View>
+          </Card>
+        )}
 
         {/* Centered Modal (fills half the screen in the middle) */}
         <Modal
@@ -725,5 +793,67 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.xs,
     fontWeight: FONT_WEIGHT.semibold as any,
+  },
+  practiceCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    width: '100%',
+    marginVertical: SPACING.sm,
+  },
+  tipBox: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    marginBottom: SPACING.sm,
+  },
+  tipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: 4,
+  },
+  tipTitle: {
+    fontFamily: FONT_FAMILY,
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.semibold as any,
+    letterSpacing: 1,
+  },
+  tipText: {
+    fontFamily: FONT_FAMILY,
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZE.sm,
+    lineHeight: 18,
+  },
+  drillSection: {
+    marginTop: 4,
+  },
+  drillTitle: {
+    fontFamily: FONT_FAMILY,
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.semibold as any,
+    letterSpacing: 1,
+    marginBottom: SPACING.xs,
+  },
+  drillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: 6,
+  },
+  drillText: {
+    fontFamily: FONT_FAMILY,
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZE.sm,
+  },
+  drillCompleted: {
+    color: COLORS.textTertiary,
+    textDecorationLine: 'line-through',
   },
 });
