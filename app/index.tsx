@@ -79,6 +79,15 @@ export default function HomeScreen() {
     return () => clearInterval(timer);
   }, [isStreakLoaded, streakCount, lastActiveDate, setStreak]);
 
+  const getStreakColor = (streak: number): string => {
+    if (streak >= 500) return '#A855F7'; // Purple
+    if (streak >= 100) return '#EF4444'; // Red
+    if (streak >= 50) return '#F97316';  // Orange
+    if (streak >= 10) return '#EAB308';  // Yellow
+    return COLORS.accent;                // Emerald Green
+  };
+  const streakColor = getStreakColor(streakCount);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -104,8 +113,8 @@ export default function HomeScreen() {
           <View style={styles.streakBox}>
             <Text style={styles.streakLabel}>DAILY STREAK</Text>
             <View style={styles.streakRow}>
-              <Ionicons name="flame" size={24} color={COLORS.accent} />
-              <Text style={styles.streakValue}>
+              <Ionicons name="flame" size={24} color={streakColor} />
+              <Text style={[styles.streakValue, { color: streakColor }]}>
                 {streakCount} {streakCount === 1 ? 'Day' : 'Days'}
               </Text>
             </View>
@@ -285,7 +294,6 @@ const styles = StyleSheet.create({
   },
   streakValue: {
     fontFamily: FONT_FAMILY,
-    color: COLORS.accent, // emerald green flame/count
     fontSize: FONT_SIZE.xl,
     fontWeight: FONT_WEIGHT.bold as any,
   },
