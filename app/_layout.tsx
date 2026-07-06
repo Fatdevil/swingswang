@@ -10,17 +10,22 @@ import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { AnalysisProvider } from '../src/context/AnalysisContext';
+import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
 import { COLORS, SPACING, FONT_SIZE } from '../src/constants/theme';
 import { useAnalysis } from '../src/hooks/useAnalysis';
 import { Pressable, View, StyleSheet, Modal, Text } from 'react-native';
 
 function NavigationLayout() {
   const { selectAndLoadVideo } = useAnalysis();
+  const { themeKey } = useTheme();
   const router = useRouter();
   const [menuVisible, setMenuVisible] = useState(false);
 
+  const statusBarColor = themeKey === 'black-white' ? 'light' : 'dark';
+
   return (
     <View style={{ flex: 1 }}>
+      <StatusBar style={statusBarColor} />
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -96,6 +101,12 @@ function NavigationLayout() {
             ),
           }}
         />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            href: null,
+          }}
+        />
         {/* Hide screens that shouldn't appear in tabs */}
         <Tabs.Screen name="analyze" options={{ href: null }} />
       </Tabs>
@@ -128,7 +139,7 @@ function NavigationLayout() {
               <Ionicons name="analytics" size={18} color={COLORS.textPrimary} />
               <Text style={styles.menuItemText}>Analyze Swing</Text>
             </Pressable>
-
+ 
             <Pressable
               style={styles.menuItemDisabled}
             >
@@ -144,10 +155,11 @@ function NavigationLayout() {
 
 export default function RootLayout() {
   return (
-    <AnalysisProvider>
-      <StatusBar style="light" />
-      <NavigationLayout />
-    </AnalysisProvider>
+    <ThemeProvider>
+      <AnalysisProvider>
+        <NavigationLayout />
+      </AnalysisProvider>
+    </ThemeProvider>
   );
 }
 

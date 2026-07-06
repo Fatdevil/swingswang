@@ -11,8 +11,10 @@ import { useAnalysis } from '../src/hooks/useAnalysis';
 import { ProgressBar } from '../src/components/ui/ProgressBar';
 import { statusDisplayText, statusProgress } from '../src/types/pose';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../src/constants/theme';
+import { useTheme } from '../src/context/ThemeContext';
 
 export default function AnalyzeScreen() {
+  useTheme(); // Subscribe to theme changes
   const { status } = useAnalysis();
   const progress = statusProgress(status);
 

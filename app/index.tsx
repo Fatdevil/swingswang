@@ -6,17 +6,20 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAnalysis } from '../src/hooks/useAnalysis';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { isProcessing, statusDisplayText } from '../src/types/pose';
 import { formatDuration, formatResolution, formatFileSize } from '../src/types/video';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../src/constants/theme';
+import { useTheme } from '../src/context/ThemeContext';
 
 export default function HomeScreen() {
   const router = useRouter();
+  useTheme(); // Subscribe to theme changes
   const {
     videoSource,
     status,
@@ -35,6 +38,14 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Floating Settings Button */}
+      <Pressable
+        onPress={() => router.push('/settings')}
+        style={styles.settingsButton}
+      >
+        <Ionicons name="settings-outline" size={24} color={COLORS.textPrimary} />
+      </Pressable>
+
       <View style={styles.content}>
         {/* Hero */}
         <View style={styles.heroSection}>
@@ -223,5 +234,12 @@ const styles = StyleSheet.create({
   plusSymbol: {
     color: COLORS.textPrimary,
     fontWeight: 'bold',
+  },
+  settingsButton: {
+    position: 'absolute',
+    top: SPACING.md,
+    right: SPACING.lg,
+    zIndex: 10,
+    padding: SPACING.xs,
   },
 });

@@ -13,8 +13,10 @@ import { Button } from '../src/components/ui/Button';
 import { getRecentLogs, LogEntry, LogLevel } from '../src/utils/logger';
 import { LANDMARK_NAMES, LandmarkID } from '../src/types/landmarks';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../src/constants/theme';
+import { useTheme } from '../src/context/ThemeContext';
 
 export default function DebugScreen() {
+  useTheme(); // Subscribe to theme changes
   const { analysisResult, poseTimeline, status, videoSource } = useAnalysis();
   const [showLogs, setShowLogs] = useState(false);
   const [showRawJSON, setShowRawJSON] = useState(false);

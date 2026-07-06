@@ -6,44 +6,14 @@
  * Mobile-first, modern, balanced.
  */
 
-export const COLORS = {
-  /** Primary background — deep black. */
-  background: '#0A0A0A',
-  /** Slightly elevated surface. */
-  surface: '#141414',
-  /** Card backgrounds. */
-  card: '#1C1C1E',
-  /** Elevated card / active state. */
-  cardElevated: '#2C2C2E',
-  /** Primary text — clean white. */
-  textPrimary: '#FAFAFA',
-  /** Secondary text — muted. */
-  textSecondary: '#A1A1AA',
-  /** Tertiary text — very muted. */
-  textTertiary: '#71717A',
-  /** Primary accent — warm white with slight warmth. */
-  accent: '#F5F5F4',
-  /** Accent muted. */
-  accentMuted: '#D4D4D8',
-  /** Success / reliable. */
-  success: '#22C55E',
-  /** Warning / marginal. */
-  warning: '#EAB308',
-  /** Error / not reliable. */
-  error: '#EF4444',
-  /** Info / processing. */
-  info: '#3B82F6',
-  /** Border — subtle. */
-  border: '#27272A',
-  /** Divider line. */
-  divider: '#1E1E1E',
-  /** Skeleton overlay — vibrant but not distracting. */
-  skeletonBone: 'rgba(250, 250, 250, 0.6)',
-  /** Skeleton joint. */
-  skeletonJoint: 'rgba(250, 250, 250, 0.9)',
-  /** Overlay background. */
-  overlay: 'rgba(0, 0, 0, 0.5)',
-} as const;
+import { getActiveThemeColors } from '../context/ThemeContext';
+
+export const COLORS = new Proxy({} as any, {
+  get(_, prop: string) {
+    const active = getActiveThemeColors();
+    return active[prop as keyof typeof active] || '#000000';
+  }
+});
 
 export const SPACING = {
   xs: 4,

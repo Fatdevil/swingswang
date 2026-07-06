@@ -14,8 +14,10 @@ import { Button } from '../src/components/ui/Button';
 import { ProgressBar } from '../src/components/ui/ProgressBar';
 import { exportToJSON, copyToClipboard } from '../src/features/analysis/analysisExporter';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../src/constants/theme';
+import { useTheme } from '../src/context/ThemeContext';
 
 export default function ResultsScreen() {
+  useTheme(); // Subscribe to theme changes
   const { analysisResult } = useAnalysis();
 
   if (!analysisResult) {

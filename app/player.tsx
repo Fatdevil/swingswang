@@ -15,11 +15,13 @@ import { Badge } from '../src/components/ui/Badge';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../src/constants/theme';
 import { reliabilityColor } from '../src/types/metrics';
 import { reliabilityFromConfidence } from '../src/types/metrics';
+import { useTheme } from '../src/context/ThemeContext';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PLAYBACK_RATES = [0.25, 0.5, 1.0];
 
 export default function PlayerScreen() {
+  useTheme(); // Subscribe to theme changes
   const { videoSource, poseTimeline } = useAnalysis();
   const videoRef = useRef<Video>(null);
 
