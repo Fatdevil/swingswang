@@ -55,12 +55,9 @@ export default function HomeScreen() {
 
           {/* No video loaded */}
           {!videoSource && (
-            <Button
-              title="ANALYZE A SWING"
-              onPress={selectAndLoadVideo}
-              variant="primary"
-              loading={status.type === 'selecting'}
-            />
+            <Text style={styles.instructionText}>
+              Tap the <Text style={styles.plusSymbol}>+</Text> button below to select and analyze a golf swing.
+            </Text>
           )}
 
           {/* Video loaded — show info and process button */}
@@ -214,5 +211,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: SPACING.md,
     opacity: 0.5,
+  },
+  instructionText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZE.md,
+    lineHeight: 22,
+    textAlign: 'center',
+    paddingHorizontal: SPACING.lg,
+    marginTop: SPACING.xl,
+  },
+  plusSymbol: {
+    color: COLORS.textPrimary,
+    fontWeight: 'bold',
   },
 });
