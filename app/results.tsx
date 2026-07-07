@@ -14,6 +14,46 @@ import { Button } from '../src/components/ui/Button';
 import { ProgressBar } from '../src/components/ui/ProgressBar';
 import { exportToJSON, copyToClipboard } from '../src/features/analysis/analysisExporter';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
+import { MetricResult, ReliabilityStatus } from '../src/types/metrics';
+import { MetricResultV1 } from '../src/features/metrics/registry';
+
+/** Helper to adapt V1 metrics to V0 structures for MetricResultCard display compatibility. */
+function adaptV1ToV0(metric?: MetricResultV1): MetricResult {
+  if (!metric) {
+    return {
+      metricId: 'unknown',
+      name: 'Unknown Metric',
+      rawValue: null,
+      normalizedValue: null,
+      unit: 'n/a',
+      confidence: 0,
+      status: ReliabilityStatus.NotReliable,
+      framesUsed: 0,
+      warnings: ['Metric data missing'],
+      calculationExplanation: 'No data',
+      limitations: [],
+    };
+  }
+
+  let status: ReliabilityStatus = ReliabilityStatus.NotReliable;
+  if (metric.status === 'RELIABLE') status = ReliabilityStatus.Reliable;
+  else if (metric.status === 'MARGINAL') status = ReliabilityStatus.Marginal;
+
+  return {
+    metricId: metric.id,
+    name: metric.name,
+    rawValue: metric.value,
+    normalizedValue: metric.normalizedValue,
+    unit: metric.unit,
+    confidence: metric.confidence,
+    status,
+    framesUsed: metric.framesUsed,
+    warnings: metric.warnings,
+    calculationExplanation: metric.calculationExplanation,
+    limitations: metric.limitations,
+  };
+}
+
 export default function ResultsScreen() {
   const { analysisResult } = useAnalysis();
 
@@ -30,7 +70,28 @@ export default function ResultsScreen() {
     );
   }
 
-  const { metrics, pose, processing, warnings } = analysisResult;
+  const isV1 = 'schemaVersion' in analysisResult && analysisResult.schemaVersion === '1.0';
+
+  // Adapt metrics
+  const headMovement = isV1
+    ? adaptV1ToV0((analysisResult.metrics as Record<string, MetricResultV1>).headMovement)
+    : (analysisResult.metrics as any).headMovement;
+
+  const torsoAngleChange = isV1
+    ? adaptV1ToV0((analysisResult.metrics as Record<string, MetricResultV1>).torsoAngleChange)
+    : (analysisResult.metrics as any).torsoAngleChange;
+
+  const hipMovementProxy = isV1
+    ? adaptV1ToV0((analysisResult.metrics as Record<string, MetricResultV1>).hipMovementProxy)
+    : (analysisResult.metrics as any).hipMovementProxy;
+
+  const pose = analysisResult.pose;
+  const processing = analysisResult.processing;
+
+  // Extract warnings list
+  const warningList: string[] = isV1
+    ? (analysisResult.warnings as any).userFacing || []
+    : (analysisResult.warnings as string[]) || [];
 
   const handleExport = async () => {
     try {
@@ -50,9 +111,9 @@ export default function ResultsScreen() {
 
         {/* Metrics */}
         <Text style={styles.sectionTitle}>MEASUREMENTS</Text>
-        <MetricResultCard result={metrics.headMovement} />
-        <MetricResultCard result={metrics.torsoAngleChange} />
-        <MetricResultCard result={metrics.hipMovementProxy} />
+        <MetricResultCard result={headMovement} />
+        <MetricResultCard result={torsoAngleChange} />
+        <MetricResultCard result={hipMovementProxy} />
 
         {/* Pose Quality */}
         <Text style={styles.sectionTitle}>POSE QUALITY</Text>
@@ -107,11 +168,11 @@ export default function ResultsScreen() {
         </Card>
 
         {/* Warnings */}
-        {warnings.length > 0 && (
+        {warningList.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>WARNINGS</Text>
             <Card>
-              {warnings.map((w, i) => (
+              {warningList.map((w, i) => (
                 <Text key={i} style={styles.warningText}>⚠ {w}</Text>
               ))}
             </Card>

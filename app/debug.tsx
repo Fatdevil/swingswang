@@ -80,6 +80,69 @@ export default function DebugScreen() {
           </Card>
         )}
 
+        {/* V1 Diagnostics */}
+        {analysisResult && 'schemaVersion' in analysisResult && (analysisResult as any).schemaVersion === '1.0' && (
+          <>
+            {/* Confidence summary */}
+            <Card title="V1 Confidence Scores" style={styles.section}>
+              <Text style={styles.mono}>Overall: {((analysisResult as any).confidence.overall * 100).toFixed(0)}%</Text>
+              <Text style={styles.mono}>Video quality: {((analysisResult as any).confidence.video * 100).toFixed(0)}%</Text>
+              <Text style={styles.mono}>Pose estimation: {((analysisResult as any).confidence.pose * 100).toFixed(0)}%</Text>
+              <Text style={styles.mono}>Swing events: {((analysisResult as any).confidence.events * 100).toFixed(0)}%</Text>
+              <Text style={styles.mono}>Biomechanics: {((analysisResult as any).confidence.metrics * 100).toFixed(0)}%</Text>
+            </Card>
+
+            {/* Quality gate */}
+            {(analysisResult as any).quality && (
+              <Card title="Video Quality Gate" style={styles.section}>
+                <Text style={styles.mono}>Overall status: {(analysisResult as any).quality.overallStatus}</Text>
+                <Text style={styles.mono}>Confidence: {((analysisResult as any).quality.confidence * 100).toFixed(0)}%</Text>
+                <Text style={styles.mono}>Body visibility: {(analysisResult as any).quality.checks.bodyVisibility.status}</Text>
+                <Text style={styles.mono}>Golfer size: {(analysisResult as any).quality.checks.golferSize.status} (ratio: {((analysisResult as any).quality.checks.golferSize.bodyRatio * 100).toFixed(1)}%)</Text>
+                <Text style={styles.mono}>Pose coverage: {(analysisResult as any).quality.checks.poseCoverage.status} (reliable ratio: {((analysisResult as any).quality.checks.poseCoverage.reliableRatio * 100).toFixed(1)}%)</Text>
+                <Text style={styles.mono}>Video suitability: {(analysisResult as any).quality.checks.videoSuitability.status}</Text>
+              </Card>
+            )}
+
+            {/* Stabilization report */}
+            {(analysisResult as any).stabilization && (
+              <Card title="Stabilization Report" style={styles.section}>
+                <Text style={styles.mono}>Total frames: {(analysisResult as any).stabilization.totalFrames}</Text>
+                <Text style={styles.mono}>Filtered landmarks: {(analysisResult as any).stabilization.landmarksFiltered}</Text>
+                <Text style={styles.mono}>Outliers removed: {(analysisResult as any).stabilization.outliersDetected}</Text>
+                <Text style={styles.mono}>Gaps interpolated: {(analysisResult as any).stabilization.gapsInterpolated}</Text>
+                <Text style={styles.mono}>Gaps rejected: {(analysisResult as any).stabilization.gapsRejected}</Text>
+                <Text style={styles.mono}>Adaptive smoothing: {(analysisResult as any).stabilization.smoothingApplied ? 'Yes' : 'No'}</Text>
+              </Card>
+            )}
+
+            {/* Swing events */}
+            {(analysisResult as any).events && (
+              <Card title="Detected Swing Events" style={styles.section}>
+                <Text style={styles.mono}>Total detected: {(analysisResult as any).events.detectedCount}</Text>
+                <Text style={styles.mono}>Reliable events: {(analysisResult as any).events.reliableCount}</Text>
+                {((analysisResult as any).events.events as any[]).map((e, idx) => (
+                  <Text key={e.event + idx} style={styles.mono}>
+                    • {e.event}: {e.timestampMs !== null ? `${(e.timestampMs / 1000).toFixed(3)}s` : 'Not detected'} ({e.status}, {Math.round(e.confidence * 100)}%)
+                  </Text>
+                ))}
+              </Card>
+            )}
+
+            {/* V1 Metrics */}
+            <Card title="Registered Metrics (V1)" style={styles.section}>
+              {Object.keys((analysisResult as any).metrics).map((key) => {
+                const metric = (analysisResult as any).metrics[key];
+                return (
+                  <Text key={key} style={styles.mono}>
+                    • {metric.name} ({metric.id}): {metric.value !== null ? metric.value.toFixed(2) : 'null'} {metric.unit} ({metric.status}, {Math.round(metric.confidence * 100)}%)
+                  </Text>
+                );
+              })}
+            </Card>
+          </>
+        )}
+
         {/* Logs */}
         <View style={styles.section}>
           <Button

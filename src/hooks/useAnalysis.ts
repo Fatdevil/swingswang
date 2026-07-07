@@ -11,6 +11,7 @@ import { selectVideo, validateVideo } from '@/features/video/videoImporter';
 import { runAnalysisPipeline } from '@/features/analysis/analysisPipeline';
 import { Logger } from '@/utils/logger';
 import { Alert } from 'react-native';
+import { SwingConfig } from '@/types/swing';
 
 export function useAnalysis() {
   const { state, dispatch } = useAnalysisContext();
@@ -61,7 +62,10 @@ export function useAnalysis() {
       const result = await runAnalysisPipeline(
         state.videoSource.uri,
         state.videoSource.metadata,
-        (status) => dispatch({ type: 'SET_STATUS', payload: status })
+        (status) => dispatch({ type: 'SET_STATUS', payload: status }),
+        undefined, // engineConfig
+        undefined, // isCancelled
+        state.swingConfig
       );
 
       dispatch({ type: 'SET_TIMELINE', payload: result.timeline });
@@ -74,7 +78,12 @@ export function useAnalysis() {
       dispatch({ type: 'SET_STATUS', payload: { type: 'failed', error: msg } });
       return false;
     }
-  }, [state.videoSource, dispatch]);
+  }, [state.videoSource, state.swingConfig, dispatch]);
+
+  /** Set swing configuration */
+  const setSwingConfig = useCallback((config: SwingConfig) => {
+    dispatch({ type: 'SET_SWING_CONFIG', payload: config });
+  }, [dispatch]);
 
   /** Reset everything. */
   const resetAnalysis = useCallback(() => {
@@ -114,8 +123,10 @@ export function useAnalysis() {
     myCode: state.myCode,
     friends: state.friends,
     isFriendDataLoaded: state.isFriendDataLoaded,
+    swingConfig: state.swingConfig,
     selectAndLoadVideo,
     startAnalysis,
+    setSwingConfig,
     resetAnalysis,
     toggleDebug,
     clearHistory,

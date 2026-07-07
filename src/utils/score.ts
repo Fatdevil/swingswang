@@ -6,12 +6,23 @@
  */
 
 import { AnalysisResult } from '../types/analysis';
+import { AnalysisResultV1 } from '../types/analysisV1';
 
-export function calculateSwingScore(result: AnalysisResult): number {
-  // Retrieve normalized metric values (closer to 0 is more stable/better)
-  const head = result.metrics.headMovement.normalizedValue ?? 0.0;
-  const torso = result.metrics.torsoAngleChange.normalizedValue ?? 0.0;
-  const hip = result.metrics.hipMovementProxy.normalizedValue ?? 0.0;
+export function calculateSwingScore(result: AnalysisResult | AnalysisResultV1): number {
+  let head = 0.0;
+  let torso = 0.0;
+  let hip = 0.0;
+
+  if ('schemaVersion' in result && result.schemaVersion === '1.0') {
+    head = result.metrics['headMovement']?.normalizedValue ?? 0.0;
+    torso = result.metrics['torsoAngleChange']?.normalizedValue ?? 0.0;
+    hip = result.metrics['hipMovementProxy']?.normalizedValue ?? 0.0;
+  } else {
+    const oldResult = result as AnalysisResult;
+    head = oldResult.metrics.headMovement.normalizedValue ?? 0.0;
+    torso = oldResult.metrics.torsoAngleChange.normalizedValue ?? 0.0;
+    hip = oldResult.metrics.hipMovementProxy.normalizedValue ?? 0.0;
+  }
 
   // Calculate average displacement
   const avgDisplacement = (head + torso + hip) / 3;

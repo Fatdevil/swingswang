@@ -9,6 +9,8 @@ import React, { createContext, useContext, useReducer, useEffect, type ReactNode
 import { ProcessingStatus } from '../types/pose';
 import { VideoSource } from '../types/video';
 import { AnalysisResult } from '../types/analysis';
+import { AnalysisResultV1 } from '../types/analysisV1';
+import { SwingConfig } from '../types/swing';
 import { PoseTimeline } from '../features/timeline/PoseTimeline';
 import { calculateSwingScore } from '../utils/score';
 import { saveHistoryLocally, loadHistoryLocally } from '../utils/history';
@@ -27,7 +29,7 @@ export interface AnalysisState {
   videoSource: VideoSource | null;
   status: ProcessingStatus;
   poseTimeline: PoseTimeline | null;
-  analysisResult: AnalysisResult | null;
+  analysisResult: AnalysisResult | AnalysisResultV1 | null;
   debugMode: boolean;
   history: number[];
   isHistoryLoaded: boolean;
@@ -37,6 +39,7 @@ export interface AnalysisState {
   myCode: string;
   friends: Friend[];
   isFriendDataLoaded: boolean;
+  swingConfig: SwingConfig;
 }
 
 const initialState: AnalysisState = {
@@ -53,6 +56,11 @@ const initialState: AnalysisState = {
   myCode: '',
   friends: [],
   isFriendDataLoaded: false,
+  swingConfig: {
+    cameraView: 'FO',
+    handedness: 'RIGHT',
+    club: 'DRIVER',
+  },
 };
 
 // ─── Actions ────────────────────────────────────────────────────────
@@ -61,7 +69,8 @@ type Action =
   | { type: 'SET_VIDEO'; payload: VideoSource | null }
   | { type: 'SET_STATUS'; payload: ProcessingStatus }
   | { type: 'SET_TIMELINE'; payload: PoseTimeline | null }
-  | { type: 'SET_RESULT'; payload: AnalysisResult | null }
+  | { type: 'SET_RESULT'; payload: AnalysisResult | AnalysisResultV1 | null }
+  | { type: 'SET_SWING_CONFIG'; payload: SwingConfig }
   | { type: 'LOAD_HISTORY'; payload: number[] }
   | { type: 'CLEAR_HISTORY' }
   | { type: 'LOAD_STREAK'; payload: StreakData }
@@ -125,6 +134,8 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         ...state,
         friends: [...state.friends, action.payload],
       };
+    case 'SET_SWING_CONFIG':
+      return { ...state, swingConfig: action.payload };
     case 'TOGGLE_DEBUG':
       return { ...state, debugMode: !state.debugMode };
     case 'RESET':
@@ -138,6 +149,7 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         myCode: state.myCode,
         friends: state.friends,
         isFriendDataLoaded: state.isFriendDataLoaded,
+        swingConfig: state.swingConfig,
       };
     default:
       return state;

@@ -20,7 +20,8 @@ import { Logger, PerformanceTimer } from '../../utils/logger';
 export async function processVideoFrames(
   frames: readonly FrameData[],
   engine: PoseEngine,
-  onProgress?: (framesComplete: number, framesTotal: number) => void
+  onProgress?: (framesComplete: number, framesTotal: number) => void,
+  isCancelled?: () => boolean
 ): Promise<PoseFrame[]> {
   const timer = new PerformanceTimer('processVideoFrames');
   const results: PoseFrame[] = [];
@@ -29,6 +30,11 @@ export async function processVideoFrames(
   Logger.pose.info(`Starting pose processing: ${total} frames with ${engine.name}`);
 
   for (let i = 0; i < total; i++) {
+    if (isCancelled && isCancelled()) {
+      Logger.pose.info('Pose processing cancelled by caller.');
+      throw new Error('Pose processing cancelled');
+    }
+
     const frame = frames[i];
 
     try {

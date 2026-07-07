@@ -49,7 +49,18 @@ export async function selectVideo(): Promise<VideoSource | null> {
       duration: asset.duration,
     });
 
-    const metadata = buildMetadata(asset);
+    // Handle duration=0 or null/undefined from ImagePicker
+    let durationSeconds = (asset.duration || 0) / 1000;
+    if (durationSeconds <= 0) {
+      Logger.video.info('Selected video duration is 0 or null. Attempting fallback duration extraction via expo-video...');
+      try {
+        durationSeconds = await getFallbackDuration(asset.uri);
+      } catch (err) {
+        Logger.video.error('Fallback duration extraction error', { error: String(err) });
+      }
+    }
+
+    const metadata = buildMetadata(asset, durationSeconds);
 
     return {
       uri: asset.uri,
@@ -61,12 +72,66 @@ export async function selectVideo(): Promise<VideoSource | null> {
   }
 }
 
+/**
+ * Asynchronously retrieve video duration using expo-video player
+ * as a fallback if ImagePicker returns 0 or null duration.
+ */
+async function getFallbackDuration(uri: string): Promise<number> {
+  return new Promise((resolve) => {
+    try {
+      const { createVideoPlayer } = require('expo-video');
+      if (!createVideoPlayer) {
+        Logger.video.warn('createVideoPlayer not available in expo-video');
+        resolve(0);
+        return;
+      }
+
+      const player = createVideoPlayer(uri);
+      if (!player) {
+        resolve(0);
+        return;
+      }
+
+      // Check if duration is already ready
+      if (player.duration > 0) {
+        const d = player.duration;
+        player.release();
+        resolve(d);
+        return;
+      }
+
+      // Timeout fallback
+      const timeout = setTimeout(() => {
+        subscription.remove();
+        const d = player.duration || 0;
+        player.release();
+        Logger.video.warn(`Fallback duration extraction timed out, using: ${d}s`);
+        resolve(d);
+      }, 2000);
+
+      const subscription = player.addListener('statusChange', (status: string) => {
+        if ((status === 'readyToPlay' || player.status === 'readyToPlay') && player.duration > 0) {
+          clearTimeout(timeout);
+          subscription.remove();
+          const d = player.duration;
+          player.release();
+          resolve(d);
+        }
+      });
+    } catch (e) {
+      Logger.video.error('Failed to get fallback duration from expo-video', { error: String(e) });
+      resolve(0);
+    }
+  });
+}
+
 /** Build VideoMetadata from an ImagePicker asset. */
-function buildMetadata(asset: ImagePicker.ImagePickerAsset): VideoMetadata {
+function buildMetadata(asset: ImagePicker.ImagePickerAsset, durationOverride?: number): VideoMetadata {
   const width = asset.width || 0;
   const height = asset.height || 0;
-  const durationMs = asset.duration || 0;
-  const duration = durationMs / 1000; // ImagePicker returns ms
+  const duration = durationOverride !== undefined && durationOverride > 0
+    ? durationOverride
+    : (asset.duration ? asset.duration / 1000 : 0.0);
 
   return {
     duration,

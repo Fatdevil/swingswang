@@ -7,7 +7,7 @@
 
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { FrameData } from '../../types/video';
-import { ANALYSIS_FRAME_RATE } from '../../constants/config';
+import { ANALYSIS_FRAME_RATE, MAX_ABSOLUTE_DURATION } from '../../constants/config';
 import { Logger, PerformanceTimer } from '../../utils/logger';
 
 /**
@@ -17,29 +17,39 @@ import { Logger, PerformanceTimer } from '../../utils/logger';
  * @param duration - Video duration in seconds.
  * @param frameRate - Analysis frame rate (default: ANALYSIS_FRAME_RATE).
  * @param onProgress - Progress callback (0–1).
+ * @param isCancelled - Optional function returning true if extraction should abort.
  * @returns Array of extracted FrameData with image URIs and timestamps.
  */
 export async function extractFrames(
   uri: string,
   duration: number,
   frameRate: number = ANALYSIS_FRAME_RATE,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  isCancelled?: () => boolean
 ): Promise<FrameData[]> {
   const timer = new PerformanceTimer('extractFrames');
+
+  // Enforce absolute maximum duration guardrail
+  const safeDuration = Math.min(duration, MAX_ABSOLUTE_DURATION);
 
   // Calculate timestamps at the desired frame rate
   const intervalSeconds = 1.0 / frameRate;
   const timestamps: number[] = [];
 
-  for (let t = 0; t < duration; t += intervalSeconds) {
+  for (let t = 0; t < safeDuration; t += intervalSeconds) {
     timestamps.push(t);
   }
 
-  Logger.video.info(`Extracting ${timestamps.length} frames at ${frameRate}fps from ${duration.toFixed(1)}s video`);
+  Logger.video.info(`Extracting ${timestamps.length} frames at ${frameRate}fps from ${safeDuration.toFixed(1)}s video (original: ${duration.toFixed(1)}s)`);
 
   const frames: FrameData[] = [];
 
   for (let i = 0; i < timestamps.length; i++) {
+    if (isCancelled && isCancelled()) {
+      Logger.video.info('Frame extraction cancelled by caller.');
+      throw new Error('Frame extraction cancelled');
+    }
+
     const timestamp = timestamps[i];
     const timeMs = Math.round(timestamp * 1000);
 
