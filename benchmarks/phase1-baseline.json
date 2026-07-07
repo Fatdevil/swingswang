@@ -1,0 +1,58 @@
+{
+  "baselineDate": "2026-07-07",
+  "environment": "windows_development",
+  "poseEngine": {
+    "name": "MockPoseEngine",
+    "version": "1.0.0",
+    "type": "synthetic"
+  },
+  "device": {
+    "platform": "windows_dev",
+    "model": "development_machine",
+    "note": "No physical device measurements available. MockPoseEngine only."
+  },
+  "configuration": {
+    "analysisFrameRate": 15,
+    "minLandmarkConfidence": 0.3,
+    "minFrameConfidence": 0.5,
+    "referenceFrameRatio": 0.1,
+    "minReferenceFrames": 3,
+    "maxReferenceFrames": 10,
+    "thumbnailQuality": 0.8
+  },
+  "pipelineArchitecture": {
+    "frameExtraction": "sequential_expo_video_thumbnails",
+    "poseProcessing": "sequential_js_thread",
+    "metricCalculation": "synchronous_js",
+    "timelineLookup": "binary_search"
+  },
+  "mockEstimates": {
+    "note": "These are estimates based on MockPoseEngine behavior, not real measurements",
+    "fiveSecondVideo": {
+      "durationMs": 5000,
+      "sourceFps": null,
+      "sampledFps": 15,
+      "framesExtracted": 75,
+      "estimatedExtractionTimeMs": 3500,
+      "mockPoseDelayPerFrameMs": "10-30",
+      "estimatedPoseTimeMs": 1500,
+      "estimatedMetricTimeMs": 50,
+      "estimatedTotalTimeMs": 5050
+    }
+  },
+  "existingTests": {
+    "totalSuites": 7,
+    "totalTests": 106,
+    "allPassing": true,
+    "executionTimeMs": 5031
+  },
+  "phase1MeasurementPlan": [
+    "Measure ExecuTorch inference time per frame on physical device",
+    "Measure total pipeline time with real pose estimation",
+    "Measure UI responsiveness during analysis",
+    "Measure memory usage and warnings",
+    "Test with 30fps and 60fps source videos",
+    "Test with 3s, 5s, and 10s video durations",
+    "Measure skeleton overlay synchronization quality"
+  ]
+}

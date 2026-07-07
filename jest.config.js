@@ -2,6 +2,9 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  globals: {
+    __DEV__: true,
+  },
   roots: ['<rootDir>/tests'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
@@ -11,7 +14,9 @@ module.exports = {
         esModuleInterop: true,
         strict: true,
         jsx: 'react-jsx',
-        paths: {},
+        paths: {
+          '@/*': ['./src/*'],
+        },
       },
     }],
   },
