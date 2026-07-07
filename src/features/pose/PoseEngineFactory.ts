@@ -14,15 +14,34 @@ import { Logger } from '@/utils/logger';
 /**
  * Check if a real pose engine is available in this build.
  * Returns availability info without creating an engine.
+ *
+ * Detection strategy: try to require the native module.
+ * If it throws, the native module is not linked (Expo Go / missing dep).
  */
 export function checkRealEngineAvailability(): PoseEngineAvailability {
-  // TODO AB-1: Check for react-native-executorch native module availability
-  // For now, no real engine is installed
-  return {
-    available: false,
-    provider: null,
-    reason: 'No real pose engine installed. Requires a Development Build with react-native-executorch.',
-  };
+  try {
+    const executorch = require('react-native-executorch');
+    if (executorch?.PoseEstimationModule) {
+      return {
+        available: true,
+        provider: 'EXECUTORCH',
+        reason: 'react-native-executorch PoseEstimationModule detected.',
+      };
+    }
+    return {
+      available: false,
+      provider: null,
+      reason: 'react-native-executorch loaded but PoseEstimationModule not found.',
+    };
+  } catch {
+    return {
+      available: false,
+      provider: null,
+      reason:
+        'react-native-executorch native module not available. ' +
+        'Requires a Development Build (not Expo Go).',
+    };
+  }
 }
 
 /**
@@ -49,11 +68,11 @@ export function createPoseEngine(config: PoseEngineConfig): PoseEngine {
     );
   }
 
-  // When a real engine becomes available, create it here:
-  // if (availability.provider === 'EXECUTORCH') {
-  //   Logger.pose.info('Creating ExecuTorchAdapter (real mode)');
-  //   return new ExecuTorchAdapter();
-  // }
+  if (availability.provider === 'EXECUTORCH') {
+    const { ExecuTorchPoseAdapter } = require('./ExecuTorchPoseAdapter');
+    Logger.pose.info('Creating ExecuTorchPoseAdapter (real mode)');
+    return new ExecuTorchPoseAdapter();
+  }
 
   throw new Error(`Unsupported pose engine provider: ${availability.provider}`);
 }

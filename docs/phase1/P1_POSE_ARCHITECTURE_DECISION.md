@@ -89,15 +89,25 @@ Phase 2 (LATER — Sprint AB-1 extension if needed):
 | MediaPipe Framework | Apache 2.0 | ✅ |
 | MediaPipe pose model weights | Apache 2.0 | ✅ |
 
-> **ACTION REQUIRED**: Verify YOLO26N_POSE model license before any commercial release.
-> This was explicitly requested in the user's Phase 1 approval conditions.
+> **⚠️ CONFIRMED: YOLO26N_POSE model weights are AGPL-3.0 (Ultralytics).**
+> This means: closed-source commercial distribution requires an Enterprise License from Ultralytics.
+> The `react-native-executorch` runtime itself is MIT — no restriction.
+>
+> **For development and open-source use**: AGPL is fine.
+> **For commercial App Store release**: Either buy Ultralytics Enterprise License
+> or switch to a custom MediaPipe module (Apache 2.0 model weights).
+>
+> This was explicitly requested in the user's Phase 1 approval conditions:
+> *"Add a separate license gate for runtime and model weights."*
 
 ---
 
 ## Risks
 
-1. **react-native-executorch + Expo SDK 57**: Not explicitly tested. May need config plugin adjustments.
+1. ~~**react-native-executorch + Expo SDK 57**~~: Installed successfully, 0 TS errors.
 2. **Dev Build required**: Cannot test in Expo Go. Need EAS Build or local build.
 3. **Model size**: YOLO26N_POSE model size unknown — may impact app bundle.
 4. **Inference speed**: Unknown on-device performance for 15fps frame analysis.
-5. **YOLO license blocker**: If YOLO model is AGPL, cannot use commercially without license change.
+5. **YOLO license blocker**: **CONFIRMED AGPL-3.0** — Enterprise License or model swap required for commercial release.
+6. **Coordinate format uncertainty**: ExecuTorch may output pixel or normalized coords — adapter handles both but needs device verification.
+

@@ -15,6 +15,7 @@ import { useAnalysis } from '../src/hooks/useAnalysis';
 import { Pressable, View, StyleSheet, Modal, Text } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import { initializeExecuTorch } from '../src/features/pose/executorchInit';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -158,6 +159,8 @@ export default function RootLayout() {
     if (loaded || error) {
       SplashScreen.hideAsync();
     }
+    // Initialize ExecuTorch for real pose inference (safe in Expo Go)
+    initializeExecuTorch();
   }, [loaded, error]);
 
   if (!loaded && !error) {
