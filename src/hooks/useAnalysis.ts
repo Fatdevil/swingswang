@@ -6,10 +6,10 @@
  */
 
 import { useCallback } from 'react';
-import { useAnalysisContext } from '../context/AnalysisContext';
-import { selectVideo, validateVideo } from '../features/video/videoImporter';
-import { runAnalysisPipeline } from '../features/analysis/analysisPipeline';
-import { Logger } from '../utils/logger';
+import { useAnalysisContext } from '@/context/AnalysisContext';
+import { selectVideo, validateVideo } from '@/features/video/videoImporter';
+import { runAnalysisPipeline } from '@/features/analysis/analysisPipeline';
+import { Logger } from '@/utils/logger';
 import { Alert } from 'react-native';
 
 export function useAnalysis() {

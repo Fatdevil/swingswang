@@ -5,17 +5,18 @@
  * Full analysis pipeline orchestrator.
  */
 
-import { AnalysisResult, PoseSummary, buildAnalysisResult } from '../../types/analysis';
-import { ProcessingStatus, ProcessingStats } from '../../types/pose';
-import { VideoMetadata } from '../../types/video';
-import { createPoseEngine } from '../pose/ExecuTorchAdapter';
-import { extractFrames } from '../video/frameExtractor';
-import { processVideoFrames } from '../pose/poseProcessor';
-import { buildTimeline } from '../timeline/timelineBuilder';
-import { calculateAllMetrics } from '../metrics/MetricEngine';
-import { PoseTimeline } from '../timeline/PoseTimeline';
-import { ANALYSIS_FRAME_RATE } from '../../constants/config';
-import { Logger, PerformanceTimer } from '../../utils/logger';
+import { AnalysisResult, PoseSummary, buildAnalysisResult } from '@/types/analysis';
+import { ProcessingStatus, ProcessingStats } from '@/types/pose';
+import { VideoMetadata } from '@/types/video';
+import { createPoseEngine } from '@/features/pose/PoseEngineFactory';
+import { PoseEngineConfig } from '@/features/pose/types';
+import { extractFrames } from '@/features/video/frameExtractor';
+import { processVideoFrames } from '@/features/pose/poseProcessor';
+import { buildTimeline } from '@/features/timeline/timelineBuilder';
+import { calculateAllMetrics } from '@/features/metrics/MetricEngine';
+import { PoseTimeline } from '@/features/timeline/PoseTimeline';
+import { ANALYSIS_FRAME_RATE } from '@/constants/config';
+import { Logger, PerformanceTimer } from '@/utils/logger';
 
 /** Pipeline result including timeline for video player overlay. */
 export interface PipelineResult {
@@ -31,11 +32,12 @@ export interface PipelineResult {
 export async function runAnalysisPipeline(
   videoUri: string,
   metadata: VideoMetadata,
-  onStatus: (status: ProcessingStatus) => void
+  onStatus: (status: ProcessingStatus) => void,
+  engineConfig?: PoseEngineConfig,
 ): Promise<PipelineResult> {
   const pipelineTimer = new PerformanceTimer('analysisPipeline');
 
-  const engine = createPoseEngine();
+  const engine = createPoseEngine(engineConfig ?? { mode: 'MOCK' });
 
   try {
     // 1. Initialize pose engine
