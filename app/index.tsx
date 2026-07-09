@@ -360,6 +360,23 @@ export default function HomeScreen() {
             <Text style={styles.statusText}>{statusDisplayText(status)}</Text>
           )}
 
+          {/* No video loaded — show primary capture/import actions */}
+          {!videoSource && !analysisResult && (
+            <>
+              <Button
+                title="RECORD NEW SWING"
+                onPress={() => router.push('/camera' as any)}
+                variant="primary"
+                style={styles.processBtn}
+              />
+              <Button
+                title="Import video from gallery"
+                onPress={selectAndLoadVideo}
+                variant="ghost"
+              />
+            </>
+          )}
+
           {/* Video loaded — show info and process button */}
           {videoSource && !analysisResult && (
             <>

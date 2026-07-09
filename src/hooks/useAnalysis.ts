@@ -94,6 +94,11 @@ export function useAnalysis() {
     dispatch({ type: 'SET_SWING_CONFIG', payload: config });
   }, [dispatch]);
 
+  /** Set video source directly (e.g. from camera) */
+  const setVideoSource = useCallback((source: import('../types/video').VideoSource | null) => {
+    dispatch({ type: 'SET_VIDEO', payload: source });
+  }, [dispatch]);
+
   /** Reset everything. */
   const resetAnalysis = useCallback(() => {
     dispatch({ type: 'RESET' });
@@ -136,6 +141,7 @@ export function useAnalysis() {
     selectAndLoadVideo,
     startAnalysis,
     setSwingConfig,
+    setVideoSource,
     resetAnalysis,
     toggleDebug,
     clearHistory,
