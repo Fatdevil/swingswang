@@ -61,7 +61,9 @@ export class MockPoseEngine implements PoseEngine {
   async analyzeFrame(
     imageUri: string,
     timestamp: number,
-    frameIndex: number
+    frameIndex: number,
+    width?: number,
+    height?: number
   ): Promise<PoseFrame | null> {
     if (!this.initialized) return null;
 
@@ -83,8 +85,8 @@ export class MockPoseEngine implements PoseEngine {
       averageConfidence: avgConfidence,
       detectedCount: landmarks.size,
       missingCount: LANDMARK_COUNT - landmarks.size,
-      sourceWidth: 1080,
-      sourceHeight: 1920,
+      sourceWidth: width ?? 1080,
+      sourceHeight: height ?? 1920,
       processingTimeMs,
     };
   }

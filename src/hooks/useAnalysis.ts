@@ -62,6 +62,13 @@ export function useAnalysis() {
 
     try {
       const availability = checkRealEngineAvailability();
+      
+      // Block mock engine in production unless debug mode is enabled
+      const isMockBlocked = !__DEV__ && !state.debugMode && !availability.available;
+      if (isMockBlocked) {
+        throw new Error('Real pose analysis is unavailable, and mock analysis is disabled in production.');
+      }
+
       const engineConfig: PoseEngineConfig = {
         mode: availability.available ? 'REAL' : 'MOCK',
       };

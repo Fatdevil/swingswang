@@ -105,6 +105,7 @@ function NavigationLayout() {
         />
         {/* Hide screens that shouldn't appear in tabs */}
         <Tabs.Screen name="analyze" options={{ href: null }} />
+        <Tabs.Screen name="camera" options={{ href: null }} />
       </Tabs>
 
       {/* Modal Popup Menu */}

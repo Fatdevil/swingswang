@@ -26,7 +26,13 @@ export interface PoseEngine {
    * @param frameIndex - Sequential frame index.
    * @returns PoseFrame with detected landmarks, or null if no person detected.
    */
-  analyzeFrame(imageUri: string, timestamp: number, frameIndex: number): Promise<PoseFrame | null>;
+  analyzeFrame(
+    imageUri: string,
+    timestamp: number,
+    frameIndex: number,
+    width?: number,
+    height?: number
+  ): Promise<PoseFrame | null>;
 
   /** Release resources. */
   dispose(): void;

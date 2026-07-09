@@ -119,7 +119,9 @@ export class ExecuTorchPoseAdapter implements PoseEngine {
   async analyzeFrame(
     imageUri: string,
     timestamp: number,
-    frameIndex: number
+    frameIndex: number,
+    imageWidth?: number,
+    imageHeight?: number
   ): Promise<PoseFrame | null> {
     if (!this.initialized || !this.module) {
       Logger.pose.warn('ExecuTorchPoseAdapter not initialized');
@@ -171,21 +173,28 @@ export class ExecuTorchPoseAdapter implements PoseEngine {
 
       let poseFrame: PoseFrame;
       if (isPixelCoords) {
-        // Snaps to standard ExecuTorch model input resolutions to prevent aspect ratio skewing
         let estimatedWidth = 384;
         let estimatedHeight = 384;
         const maxVal = Math.max(maxX, maxY);
 
-        if (maxVal > 384 && maxVal <= 640) {
-          estimatedWidth = 640;
-          estimatedHeight = 640;
-        } else if (maxVal > 640) {
-          // Fallback if model output dimensions are larger (e.g. 960 or actual original image scale)
-          estimatedWidth = Math.ceil(maxVal * 1.05);
-          estimatedHeight = Math.ceil(maxVal * 1.05);
+        // If coordinates exceed standard model resolutions, they are likely in original image resolution
+        const isOriginalResolution = maxVal > 640;
+
+        if (isOriginalResolution && imageWidth && imageHeight) {
+          estimatedWidth = imageWidth;
+          estimatedHeight = imageHeight;
+        } else {
+          // Snaps to standard ExecuTorch model input resolutions to prevent aspect ratio skewing
+          if (maxVal > 384 && maxVal <= 640) {
+            estimatedWidth = 640;
+            estimatedHeight = 640;
+          } else if (maxVal > 640) {
+            estimatedWidth = Math.ceil(maxVal * 1.05);
+            estimatedHeight = Math.ceil(maxVal * 1.05);
+          }
         }
 
-        poseFrame = mapPoseOutputToFrame(
+        const normalizedFrame = mapPoseOutputToFrame(
           keypoints,
           timestamp,
           frameIndex,
@@ -193,13 +202,20 @@ export class ExecuTorchPoseAdapter implements PoseEngine {
           estimatedHeight,
           true // pixel coords → normalize
         );
+
+        poseFrame = {
+          ...normalizedFrame,
+          sourceWidth: imageWidth ?? estimatedWidth,
+          sourceHeight: imageHeight ?? estimatedHeight,
+        };
       } else {
         // Already normalized (0-1)
         poseFrame = mapPoseOutputToFrame(
           keypoints,
           timestamp,
           frameIndex,
-          1, 1, // dummy dimensions for normalized coords
+          imageWidth ?? 1,
+          imageHeight ?? 1,
           false // already normalized
         );
       }

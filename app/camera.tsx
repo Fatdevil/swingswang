@@ -68,14 +68,15 @@ export default function CameraScreen() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [autoCapture, setAutoCapture] = useState(true);
 
+  const [engineReady, setEngineReady] = useState(false);
   // Snapshot readiness states
   const [readiness, setReadiness] = useState<CameraReadinessResult>({
     status: 'SEARCHING',
-    message: 'Searching for golfer...',
-    subtext: 'Stand in view with your full body visible.',
+    message: 'Initializing pose engine...',
+    subtext: 'Please wait while we set up real-time tracking.',
     confidence: 0,
     poseFrame: null,
-    color: 'red',
+    color: 'yellow',
   });
   const [cameraLayout, setCameraLayout] = useState({ width: SCREEN_WIDTH, height: SCREEN_WIDTH * (16 / 9) });
 
@@ -96,6 +97,45 @@ export default function CameraScreen() {
   const poseEngine = useMemo(() => {
     return createPoseEngine({ mode: engineAvailability.available ? 'REAL' : 'MOCK' });
   }, [engineAvailability.available]);
+
+  // Handle pose engine lifecycle initialization
+  useEffect(() => {
+    let active = true;
+    const init = async () => {
+      try {
+        await poseEngine.initialize();
+        if (active) {
+          setEngineReady(true);
+          setReadiness({
+            status: 'SEARCHING',
+            message: 'Searching for golfer...',
+            subtext: 'Stand in view with your full body visible.',
+            confidence: 0,
+            poseFrame: null,
+            color: 'red',
+          });
+          Logger.pose.info('Pose engine initialized successfully');
+        }
+      } catch (err) {
+        Logger.pose.error('Failed to initialize pose engine', { error: String(err) });
+        if (active) {
+          setReadiness({
+            status: 'SEARCHING',
+            message: 'Engine Init Failed',
+            subtext: err instanceof Error ? err.message : String(err),
+            confidence: 0,
+            poseFrame: null,
+            color: 'red',
+          });
+        }
+      }
+    };
+    init();
+    return () => {
+      active = false;
+      poseEngine.dispose();
+    };
+  }, [poseEngine]);
 
   // Request permissions at mount
   useEffect(() => {
@@ -124,7 +164,7 @@ export default function CameraScreen() {
 
   // 2 Hz Snapshot loop for setup detektor
   useEffect(() => {
-    if (isRecording || recordingStartedRef.current || cameraMode !== 'picture' || !cameraPermission?.granted) {
+    if (isRecording || recordingStartedRef.current || cameraMode !== 'picture' || !cameraPermission?.granted || !engineReady) {
       return;
     }
 
@@ -146,8 +186,8 @@ export default function CameraScreen() {
         if (!photo || !active) return;
         photoUri = photo.uri;
 
-        // Perform frame-level pose estimation
-        const poseFrame = await poseEngine.analyzeFrame(photoUri!, 0, 0);
+        // Perform frame-level pose estimation, passing actual photo dimensions
+        const poseFrame = await poseEngine.analyzeFrame(photoUri!, 0, 0, photo.width, photo.height);
         if (!active) return;
 
         // Run readiness heuristics check
@@ -197,7 +237,7 @@ export default function CameraScreen() {
       active = false;
       clearInterval(interval);
     };
-  }, [isRecording, cameraMode, cameraPermission, poseEngine, swingConfig.cameraView, autoCapture]);
+  }, [isRecording, cameraMode, cameraPermission, poseEngine, swingConfig.cameraView, autoCapture, engineReady]);
 
   // Handle manual record press
   const handleRecordPress = () => {
@@ -237,6 +277,7 @@ export default function CameraScreen() {
 
   const recordActiveClip = async () => {
     if (!cameraRef.current) return;
+    let recordingTimeout: ReturnType<typeof setTimeout> | null = null;
     try {
       setCameraMode('video');
       // Brief pause to allow camera view mode transition
@@ -247,12 +288,15 @@ export default function CameraScreen() {
       });
 
       // Automatically stop recording after 5 seconds
-      const timeout = setTimeout(() => {
+      recordingTimeout = setTimeout(() => {
         stopRecording();
       }, RECORDING_DURATION_MS);
 
       const video = await videoPromise;
-      clearTimeout(timeout);
+      if (recordingTimeout) {
+        clearTimeout(recordingTimeout);
+        recordingTimeout = null;
+      }
 
       if (video?.uri) {
         setVideoSource({
@@ -273,6 +317,9 @@ export default function CameraScreen() {
     } catch (err) {
       Logger.video.error('Failed to record camera clip', { error: String(err) });
     } finally {
+      if (recordingTimeout) {
+        clearTimeout(recordingTimeout);
+      }
       resetCameraStates();
     }
   };

@@ -12,7 +12,8 @@
       "bundleIdentifier": "com.swingswang.app",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Swing Swang needs access to your photo library to import golf swing videos for analysis.",
-        "NSCameraUsageDescription": "Swing Swang uses the camera to record golf swings for analysis."
+        "NSCameraUsageDescription": "Swing Swang uses the camera to record golf swings for analysis.",
+        "NSMicrophoneUsageDescription": "Swing Swang needs microphone access to record audio during your swing."
       }
     },
     "android": {
@@ -25,7 +26,8 @@
       },
       "permissions": [
         "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {

@@ -100,19 +100,25 @@ async function getFallbackDuration(uri: string): Promise<number> {
         return;
       }
 
+      let subscription: any = null;
+
       // Timeout fallback
       const timeout = setTimeout(() => {
-        subscription.remove();
+        if (subscription) {
+          subscription.remove();
+        }
         const d = player.duration || 0;
         player.release();
         Logger.video.warn(`Fallback duration extraction timed out, using: ${d}s`);
         resolve(d);
       }, 2000);
 
-      const subscription = player.addListener('statusChange', (status: string) => {
+      subscription = player.addListener('statusChange', (status: string) => {
         if ((status === 'readyToPlay' || player.status === 'readyToPlay') && player.duration > 0) {
           clearTimeout(timeout);
-          subscription.remove();
+          if (subscription) {
+            subscription.remove();
+          }
           const d = player.duration;
           player.release();
           resolve(d);

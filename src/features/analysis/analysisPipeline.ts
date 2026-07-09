@@ -67,19 +67,20 @@ export async function runAnalysisPipeline(
   };
 
   const engine = createPoseEngine(engineConfig ?? { mode: 'MOCK' });
+  let frames: any[] = [];
 
   try {
     const stageTimings: Record<string, number> = {};
-
+ 
     // 1. Initialize pose engine
     const initTimer = new PerformanceTimer('stage.init');
     await engine.initialize();
     stageTimings['init'] = initTimer.stop();
-
+ 
     // 2. Extract frames
     onStatus({ type: 'extracting', progress: 0 });
     const extractionTimer = new PerformanceTimer('stage.extraction');
-    const frames = await extractFrames(
+    frames = await extractFrames(
       videoUri,
       metadata.duration,
       ANALYSIS_FRAME_RATE,
@@ -87,13 +88,13 @@ export async function runAnalysisPipeline(
       isCancelled
     );
     stageTimings['extraction'] = extractionTimer.stop();
-
+ 
     if (frames.length === 0) {
       throw new Error('No frames could be extracted from the video.');
     }
-
+ 
     Logger.video.info(`Extracted ${frames.length} frames`);
-
+ 
     // 3. Run pose detection
     onStatus({ type: 'analyzing', progress: 0, framesComplete: 0, framesTotal: frames.length });
     const poseTimer = new PerformanceTimer('stage.pose');
@@ -106,7 +107,9 @@ export async function runAnalysisPipeline(
         framesComplete: complete,
         framesTotal: total,
       }),
-      isCancelled
+      isCancelled,
+      metadata.width,
+      metadata.height
     );
     stageTimings['pose'] = poseTimer.stop();
 
@@ -306,5 +309,24 @@ export async function runAnalysisPipeline(
     throw error;
   } finally {
     engine.dispose();
+    // Clean up temporary extracted frames to prevent storage leaks
+    if (frames && frames.length > 0) {
+      try {
+        const FileSystem = require('expo-file-system');
+        if (FileSystem && FileSystem.deleteAsync) {
+          for (const frame of frames) {
+            if (frame.imageUri) {
+              try {
+                await FileSystem.deleteAsync(frame.imageUri, { idempotent: true });
+              } catch (e) {
+                Logger.video.warn(`Failed to clean up temporary frame: ${frame.imageUri}`, { error: String(e) });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        Logger.video.warn('FileSystem not available for frame cleanup in this environment', { error: String(e) });
+      }
+    }
   }
 }

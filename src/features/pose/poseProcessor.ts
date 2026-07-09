@@ -21,7 +21,9 @@ export async function processVideoFrames(
   frames: readonly FrameData[],
   engine: PoseEngine,
   onProgress?: (framesComplete: number, framesTotal: number) => void,
-  isCancelled?: () => boolean
+  isCancelled?: () => boolean,
+  width?: number,
+  height?: number
 ): Promise<PoseFrame[]> {
   const timer = new PerformanceTimer('processVideoFrames');
   const results: PoseFrame[] = [];
@@ -45,7 +47,9 @@ export async function processVideoFrames(
       const poseFrame = await engine.analyzeFrame(
         frame.imageUri,
         frame.timestamp,
-        frame.index
+        frame.index,
+        width,
+        height
       );
 
       if (poseFrame) {
