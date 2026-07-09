@@ -2,75 +2,98 @@
  * useVideoPlayer.ts
  * SwingSwang
  *
- * Manages video playback state: currentTime, isPlaying, duration.
+ * Manages video playback state using modern expo-video.
  * Also provides the current PoseFrame from the timeline if available.
  */
 
-import { useCallback, useRef, useState } from 'react';
-import { Video, AVPlaybackStatus } from 'expo-av';
+import { useState, useCallback, useEffect } from 'react';
+import { useVideoPlayer as useExpoVideoPlayer, VideoPlayer } from 'expo-video';
+import { useEventListener } from 'expo';
 import { PoseTimeline } from '../features/timeline/PoseTimeline';
 import type { PoseFrame } from '../types/pose';
+import { ANALYSIS_FRAME_RATE } from '../constants/config';
 
 export interface UseVideoPlayerReturn {
-  /** Ref to attach to expo-av Video component. */
-  videoRef: React.RefObject<Video | null>;
-  /** Whether video is currently playing. */
+  /** The native expo-video VideoPlayer instance. */
+  player: VideoPlayer;
+  /** Reactive playback states. */
   isPlaying: boolean;
-  /** Current playback position in seconds. */
   currentTime: number;
-  /** Total duration in seconds. */
   duration: number;
   /** Current PoseFrame from timeline (if available). */
   currentFrame: PoseFrame | null;
   /** Toggle play/pause. */
-  togglePlayPause: () => Promise<void>;
-  /** Seek to a specific time. */
-  seekTo: (timeSeconds: number) => Promise<void>;
+  togglePlayPause: () => void;
+  /** Seek to a specific time in seconds. */
+  seekTo: (timeSeconds: number) => void;
   /** Set playback rate. */
-  setRate: (rate: number) => Promise<void>;
-  /** Callback to pass to Video onPlaybackStatusUpdate. */
-  onPlaybackStatusUpdate: (status: AVPlaybackStatus) => void;
+  setRate: (rate: number) => void;
 }
 
 export function useVideoPlayer(
-  timeline: PoseTimeline | null = null,
+  uri: string,
+  timeline: PoseTimeline | null = null
 ): UseVideoPlayerReturn {
-  const videoRef = useRef<Video | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const player = useExpoVideoPlayer(uri || '', (p) => {
+    p.loop = true;
+    // Notify on time update matching the analysis frame rate for precise frame tracking
+    p.timeUpdateEventInterval = 1 / ANALYSIS_FRAME_RATE;
+  });
+
+  const [isPlaying, setIsPlaying] = useState(player ? player.playing : false);
+  const [currentTime, setCurrentTime] = useState(player ? player.currentTime : 0);
+  const [duration, setDuration] = useState(player ? player.duration : 0);
+
+  // Subscribe to time updates
+  useEventListener(player, 'timeUpdate', (payload) => {
+    setCurrentTime(payload.currentTime);
+  });
+
+  // Subscribe to playing state changes
+  useEventListener(player, 'playingChange', (payload) => {
+    setIsPlaying(payload.isPlaying);
+  });
+
+  // Subscribe to status changes to get correct duration when ready
+  useEventListener(player, 'statusChange', () => {
+    if (player) {
+      setDuration(player.duration);
+    }
+  });
+
+  // Keep state variables synchronized when player changes
+  useEffect(() => {
+    if (player) {
+      setIsPlaying(player.playing);
+      setCurrentTime(player.currentTime);
+      setDuration(player.duration);
+    }
+  }, [player, uri]);
 
   // Get current frame from timeline
   const currentFrame = timeline?.frameAtTime(currentTime) ?? null;
 
-  const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-    setIsPlaying(status.isPlaying);
-    setCurrentTime((status.positionMillis || 0) / 1000);
-    setDuration((status.durationMillis || 0) / 1000);
-  }, []);
-
-  const togglePlayPause = useCallback(async () => {
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      await videoRef.current.pauseAsync();
+  const togglePlayPause = useCallback(() => {
+    if (!player) return;
+    if (player.playing) {
+      player.pause();
     } else {
-      await videoRef.current.playAsync();
+      player.play();
     }
-  }, [isPlaying]);
+  }, [player]);
 
-  const seekTo = useCallback(async (timeSeconds: number) => {
-    if (!videoRef.current) return;
-    await videoRef.current.setPositionAsync(timeSeconds * 1000);
-  }, []);
+  const seekTo = useCallback((timeSeconds: number) => {
+    if (!player) return;
+    player.currentTime = timeSeconds;
+  }, [player]);
 
-  const setRate = useCallback(async (rate: number) => {
-    if (!videoRef.current) return;
-    await videoRef.current.setRateAsync(rate, true);
-  }, []);
+  const setRate = useCallback((rate: number) => {
+    if (!player) return;
+    player.playbackRate = rate;
+  }, [player]);
 
   return {
-    videoRef,
+    player,
     isPlaying,
     currentTime,
     duration,
@@ -78,6 +101,5 @@ export function useVideoPlayer(
     togglePlayPause,
     seekTo,
     setRate,
-    onPlaybackStatusUpdate,
   };
 }

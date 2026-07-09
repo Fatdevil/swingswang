@@ -5,6 +5,10 @@
  * Extracts video frames as images at configurable intervals.
  */
 
+// Risk 3 NOTE: expo-video-thumbnails is marked deprecated in Expo SDK 57.
+// In a future release, migrate to expo-video's VideoPlayer.generateThumbnailsAsync.
+// Currently, generateThumbnailsAsync requires an active player lifecycle and returns 
+// native references, so expo-video-thumbnails remains the most reliable offline batch extractor for now.
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { FrameData } from '../../types/video';
 import { ANALYSIS_FRAME_RATE, MAX_ABSOLUTE_DURATION } from '../../constants/config';

@@ -8,6 +8,7 @@
 import React, { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react';
 import { ProcessingStatus } from '../types/pose';
 import { VideoSource } from '../types/video';
+import { Logger } from '../utils/logger';
 import { AnalysisResult } from '../types/analysis';
 import { AnalysisResultV1 } from '../types/analysisV1';
 import { SwingConfig } from '../types/swing';
@@ -40,6 +41,7 @@ export interface AnalysisState {
   friends: Friend[];
   isFriendDataLoaded: boolean;
   swingConfig: SwingConfig;
+  lastProcessedAnalysisId: string | null;
 }
 
 const initialState: AnalysisState = {
@@ -61,6 +63,7 @@ const initialState: AnalysisState = {
     handedness: 'RIGHT',
     club: 'DRIVER',
   },
+  lastProcessedAnalysisId: null,
 };
 
 // ─── Actions ────────────────────────────────────────────────────────
@@ -87,23 +90,44 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         ...state,
         videoSource: action.payload,
         status: action.payload ? { type: 'ready' } : { type: 'idle' },
-        poseTimeline: null,
-        analysisResult: null,
+        // Risk 5: Retain poseTimeline and analysisResult so choosing a new video doesn't wipe previous data immediately
       };
-    case 'SET_STATUS':
-      return { ...state, status: action.payload };
+    case 'SET_STATUS': {
+      // Risk 5: Wiping results only when explicitly initiating a new process (selecting/extracting)
+      const isNewProcess = action.payload.type === 'selecting' || action.payload.type === 'extracting';
+      return { 
+        ...state, 
+        status: action.payload,
+        ...(isNewProcess ? { poseTimeline: null, analysisResult: null, lastProcessedAnalysisId: null } : {}),
+      };
+    }
     case 'SET_TIMELINE':
       return { ...state, poseTimeline: action.payload };
     case 'SET_RESULT': {
       if (action.payload) {
         const score = calculateSwingScore(action.payload);
+        
+        // Risk 6: Deduplicate history entries by checking unique analysisId (v1.0 schema)
+        const isNewAnalysis = 
+          'analysisId' in action.payload && 
+          action.payload.analysisId !== state.lastProcessedAnalysisId;
+        
+        const newHistory = isNewAnalysis 
+          ? [...state.history, score] 
+          : state.history;
+
         return {
           ...state,
           analysisResult: action.payload,
-          history: [...state.history, score],
+          history: newHistory,
+          lastProcessedAnalysisId: 'analysisId' in action.payload ? action.payload.analysisId : null,
         };
       }
-      return { ...state, analysisResult: action.payload };
+      return { 
+        ...state, 
+        analysisResult: action.payload,
+        lastProcessedAnalysisId: null,
+      };
     }
     case 'LOAD_HISTORY':
       return { ...state, history: action.payload, isHistoryLoaded: true };
@@ -150,6 +174,7 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         friends: state.friends,
         isFriendDataLoaded: state.isFriendDataLoaded,
         swingConfig: state.swingConfig,
+        lastProcessedAnalysisId: state.lastProcessedAnalysisId,
       };
     default:
       return state;
@@ -170,11 +195,15 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
   // Load history, streak, and friends at startup
   useEffect(() => {
+    let mounted = true;
+
     async function init() {
       const savedHistory = await loadHistoryLocally();
+      if (!mounted) return;
       dispatch({ type: 'LOAD_HISTORY', payload: savedHistory });
 
       const savedStreak = await loadStreakLocally();
+      if (!mounted) return;
       if (savedStreak) {
         dispatch({ type: 'LOAD_STREAK', payload: savedStreak });
       } else {
@@ -182,6 +211,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       }
 
       const savedFriends = await loadFriendDataLocally();
+      if (!mounted) return;
       if (savedFriends) {
         // Filter out Tiger Woods and Nelly Korda immediately
         const filteredFriends = savedFriends.friends.filter(
@@ -191,6 +221,16 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           type: 'LOAD_FRIEND_DATA',
           payload: { ...savedFriends, friends: filteredFriends },
         });
+
+        // Risk 8: Save back filtered friends directly to local storage immediately
+        try {
+          await saveFriendDataLocally({
+            myCode: savedFriends.myCode,
+            friends: filteredFriends,
+          });
+        } catch (err) {
+          Logger.pose.error('Failed to save filtered friends locally on startup', { error: String(err) });
+        }
       } else {
         const newCode = generateFriendCode();
         dispatch({
@@ -200,6 +240,10 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       }
     }
     init();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Save history on changes

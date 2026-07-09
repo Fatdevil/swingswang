@@ -18,10 +18,12 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  AppState,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAnalysis } from '../src/hooks/useAnalysis';
+import { checkRealEngineAvailability } from '../src/features/pose/PoseEngineFactory';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { isProcessing, statusDisplayText } from '../src/types/pose';
@@ -50,6 +52,8 @@ export default function HomeScreen() {
     swingConfig,
     setSwingConfig,
   } = useAnalysis();
+
+  const engineAvailability = checkRealEngineAvailability();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [friendCodeInput, setFriendCodeInput] = useState('');
@@ -110,7 +114,7 @@ export default function HomeScreen() {
     ? (history.reduce((a, b) => a + b, 0) / history.length).toFixed(1)
     : null;
 
-  // Real-time daily streak checking
+  // Daily streak checking (Risk 10: Run on mount/focus, not polling every 5s)
   useEffect(() => {
     if (!isStreakLoaded) return;
 
@@ -140,9 +144,16 @@ export default function HomeScreen() {
     // Check immediately upon rendering
     checkStreak();
 
-    // Check periodically (every 5 seconds) for real-time midnight transition
-    const timer = setInterval(checkStreak, 5000);
-    return () => clearInterval(timer);
+    // Check when app resumes from background
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkStreak();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, [isStreakLoaded, streakCount, lastActiveDate, setStreak]);
 
   const getStreakColor = (streak: number): string => {
@@ -354,6 +365,20 @@ export default function HomeScreen() {
             <>
               <Card title="Selected Video" style={styles.videoCard}>
                 <View style={styles.metaRow}>
+                  <Text style={styles.metaLabel}>Analysis Engine</Text>
+                  <Text 
+                    style={[
+                      styles.metaValue, 
+                      { 
+                        color: engineAvailability.available ? '#10B981' : '#F59E0B', 
+                        fontWeight: 'bold' 
+                      }
+                    ]}
+                  >
+                    {engineAvailability.available ? 'REAL (ExecuTorch)' : 'MOCK (Simulation)'}
+                  </Text>
+                </View>
+                <View style={styles.metaRow}>
                   <Text style={styles.metaLabel}>Duration</Text>
                   <Text style={styles.metaValue}>{formatDuration(videoSource.metadata.duration)}</Text>
                 </View>
@@ -374,6 +399,15 @@ export default function HomeScreen() {
                   <Text style={styles.metaValue}>{videoSource.metadata.orientation}</Text>
                 </View>
               </Card>
+
+              {!engineAvailability.available && (
+                <View style={styles.mockCallout}>
+                  <Ionicons name="warning" size={16} color="#F59E0B" />
+                  <Text style={styles.mockCalloutText}>
+                    Running in Simulation Mode. Create a Native Development Build to enable real YOLO pose inference.
+                  </Text>
+                </View>
+              )}
 
               {/* Swing Configuration Selectors */}
               <Card title="Swing Setup" style={styles.configCard}>
@@ -677,6 +711,23 @@ const styles = StyleSheet.create({
   },
   videoCard: {
     marginBottom: SPACING.md,
+  },
+  mockCallout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderWidth: 1,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  mockCalloutText: {
+    fontFamily: FONT_FAMILY,
+    color: '#D97706',
+    fontSize: FONT_SIZE.xs - 1,
+    flex: 1,
   },
   metaRow: {
     flexDirection: 'row',

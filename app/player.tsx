@@ -2,13 +2,14 @@
  * player.tsx — Swing Player
  * SwingSwang
  *
- * Video playback with skeleton overlay.
+ * Video playback with skeleton overlay using expo-video.
  */
 
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, Dimensions } from 'react-native';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { VideoView } from 'expo-video';
 import { useAnalysis } from '../src/hooks/useAnalysis';
+import { useVideoPlayer } from '../src/hooks/useVideoPlayer';
 import { SkeletonOverlay } from '../src/components/pose/SkeletonOverlay';
 import { Button } from '../src/components/ui/Button';
 import { Badge } from '../src/components/ui/Badge';
@@ -21,40 +22,25 @@ const PLAYBACK_RATES = [0.25, 0.5, 1.0];
 
 export default function PlayerScreen() {
   const { videoSource, poseTimeline } = useAnalysis();
-  const videoRef = useRef<Video>(null);
 
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const {
+    player,
+    isPlaying,
+    currentTime,
+    duration,
+    currentFrame,
+    togglePlayPause,
+    setRate,
+  } = useVideoPlayer(videoSource?.uri ?? '', poseTimeline);
+
   const [rateIndex, setRateIndex] = useState(2); // 1.0x default
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [videoLayout, setVideoLayout] = useState({ width: SCREEN_WIDTH, height: SCREEN_WIDTH * (16 / 9) });
 
-  // Get current frame from timeline
-  const currentFrame = poseTimeline?.frameAtTime(currentTime) ?? null;
-
-  const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-    setIsPlaying(status.isPlaying);
-    setCurrentTime((status.positionMillis || 0) / 1000);
-    setDuration((status.durationMillis || 0) / 1000);
-  }, []);
-
-  const togglePlayPause = async () => {
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      await videoRef.current.pauseAsync();
-    } else {
-      await videoRef.current.playAsync();
-    }
-  };
-
-  const cycleRate = async () => {
+  const cycleRate = () => {
     const nextIndex = (rateIndex + 1) % PLAYBACK_RATES.length;
     setRateIndex(nextIndex);
-    if (videoRef.current) {
-      await videoRef.current.setRateAsync(PLAYBACK_RATES[nextIndex], true);
-    }
+    setRate(PLAYBACK_RATES[nextIndex]);
   };
 
   if (!videoSource) {
@@ -78,13 +64,11 @@ export default function PlayerScreen() {
     <SafeAreaView style={styles.container}>
       {/* Video + Overlay */}
       <View style={[styles.videoContainer, { height: Math.min(displayHeight, 500) }]}>
-        <Video
-          ref={videoRef}
-          source={{ uri: videoSource.uri }}
+        <VideoView
+          player={player}
           style={styles.video}
-          resizeMode={ResizeMode.CONTAIN}
-          isLooping
-          onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+          contentFit="contain"
+          nativeControls={false}
           onLayout={(e) => {
             const { width, height } = e.nativeEvent.layout;
             setVideoLayout({ width, height });

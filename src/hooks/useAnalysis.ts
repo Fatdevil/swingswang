@@ -12,6 +12,8 @@ import { runAnalysisPipeline } from '@/features/analysis/analysisPipeline';
 import { Logger } from '@/utils/logger';
 import { Alert } from 'react-native';
 import { SwingConfig } from '@/types/swing';
+import { checkRealEngineAvailability } from '@/features/pose/PoseEngineFactory';
+import { PoseEngineConfig } from '@/features/pose/types';
 
 export function useAnalysis() {
   const { state, dispatch } = useAnalysisContext();
@@ -59,11 +61,18 @@ export function useAnalysis() {
     }
 
     try {
+      const availability = checkRealEngineAvailability();
+      const engineConfig: PoseEngineConfig = {
+        mode: availability.available ? 'REAL' : 'MOCK',
+      };
+
+      Logger.pose.info('Triggering analysis pipeline', { mode: engineConfig.mode });
+
       const result = await runAnalysisPipeline(
         state.videoSource.uri,
         state.videoSource.metadata,
         (status) => dispatch({ type: 'SET_STATUS', payload: status }),
-        undefined, // engineConfig
+        engineConfig,
         undefined, // isCancelled
         state.swingConfig
       );
