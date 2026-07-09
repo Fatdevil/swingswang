@@ -76,8 +76,8 @@ function calcLandmarkVisibility(
 
 /** Ratio of reliable frames to total frames. */
 function calcTemporalCoverage(timeline: PoseTimeline): number {
-  if (timeline.totalFramesInVideo === 0) return 0;
-  return Math.min(1, timeline.reliableFrameCount / Math.max(timeline.totalFramesInVideo, 1));
+  if (timeline.analyzedFrameCount === 0) return 0;
+  return Math.min(1, timeline.reliableFrameCount / Math.max(timeline.analyzedFrameCount, 1));
 }
 
 /** Temporal stability based on head/shoulder jitter. */

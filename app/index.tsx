@@ -51,9 +51,11 @@ export default function HomeScreen() {
     addFriend,
     swingConfig,
     setSwingConfig,
+    debugMode,
   } = useAnalysis();
 
   const engineAvailability = checkRealEngineAvailability();
+  const isMockBlocked = !__DEV__ && !debugMode && !engineAvailability.available;
 
   const [modalVisible, setModalVisible] = useState(false);
   const [friendCodeInput, setFriendCodeInput] = useState('');
@@ -392,7 +394,7 @@ export default function HomeScreen() {
                       }
                     ]}
                   >
-                    {engineAvailability.available ? 'REAL (ExecuTorch)' : 'MOCK (Simulation)'}
+                    {engineAvailability.available ? 'REAL (ExecuTorch Linked)' : 'MOCK (Simulation)'}
                   </Text>
                 </View>
                 <View style={styles.metaRow}>
@@ -529,12 +531,20 @@ export default function HomeScreen() {
                 </View>
               </Card>
 
+              {isMockBlocked && (
+                <Card title="Production Alert" style={StyleSheet.flatten([styles.videoCard, { borderColor: COLORS.error, borderWidth: 1.5 }])}>
+                  <Text style={{ color: COLORS.textPrimary, fontSize: FONT_SIZE.sm, fontFamily: FONT_FAMILY }}>
+                    ⚠️ Mock Analysis is disabled in production. A Development Build with native pose modules is required to analyze swings.
+                  </Text>
+                </Card>
+              )}
+
               <Button
-                title="PROCESS VIDEO"
+                title={isMockBlocked ? "MOCK DISABLED" : "PROCESS VIDEO"}
                 onPress={handleAnalyze}
                 variant="primary"
                 loading={isProcessing(status)}
-                disabled={isProcessing(status)}
+                disabled={isProcessing(status) || isMockBlocked}
                 style={styles.processBtn}
               />
 

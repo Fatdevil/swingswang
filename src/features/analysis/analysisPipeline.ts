@@ -114,8 +114,10 @@ export async function runAnalysisPipeline(
       throw new Error('No person detected in any frame. Ensure the golfer is visible in the video.');
     }
 
+    const totalVideoFrames = Math.round(metadata.duration * (metadata.frameRate || 30));
+
     // 4. Build raw timeline for quality checks
-    const rawTimeline = buildTimeline(poseFrames, frames.length, pipelineTimer.elapsed(), ANALYSIS_FRAME_RATE);
+    const rawTimeline = buildTimeline(poseFrames, totalVideoFrames, pipelineTimer.elapsed(), ANALYSIS_FRAME_RATE);
 
     // 5. Evaluate video quality
     const qualityTimer = new PerformanceTimer('stage.quality');
@@ -128,7 +130,7 @@ export async function runAnalysisPipeline(
     const stabilizedFrames = stabilizationResult.frames;
     const stabilizedTimeline = buildTimeline(
       stabilizedFrames,
-      frames.length,
+      totalVideoFrames,
       pipelineTimer.elapsed(),
       ANALYSIS_FRAME_RATE
     );

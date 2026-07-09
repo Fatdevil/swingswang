@@ -9,23 +9,34 @@ import { AnalysisResult } from '../types/analysis';
 import { AnalysisResultV1 } from '../types/analysisV1';
 
 export function calculateSwingScore(result: AnalysisResult | AnalysisResultV1): number {
-  let head = 0.0;
-  let torso = 0.0;
-  let hip = 0.0;
+  const values: number[] = [];
 
   if ('schemaVersion' in result && result.schemaVersion === '1.0') {
-    head = result.metrics['headMovement']?.normalizedValue ?? 0.0;
-    torso = result.metrics['torsoAngleChange']?.normalizedValue ?? 0.0;
-    hip = result.metrics['hipMovementProxy']?.normalizedValue ?? 0.0;
+    const headVal = result.metrics['headMovement']?.normalizedValue;
+    const torsoVal = result.metrics['torsoAngleChange']?.normalizedValue;
+    const hipVal = result.metrics['hipMovementProxy']?.normalizedValue;
+
+    if (headVal !== null && headVal !== undefined) values.push(headVal);
+    if (torsoVal !== null && torsoVal !== undefined) values.push(torsoVal);
+    if (hipVal !== null && hipVal !== undefined) values.push(hipVal);
   } else {
     const oldResult = result as AnalysisResult;
-    head = oldResult.metrics.headMovement.normalizedValue ?? 0.0;
-    torso = oldResult.metrics.torsoAngleChange.normalizedValue ?? 0.0;
-    hip = oldResult.metrics.hipMovementProxy.normalizedValue ?? 0.0;
+    const headVal = oldResult.metrics.headMovement.normalizedValue;
+    const torsoVal = oldResult.metrics.torsoAngleChange.normalizedValue;
+    const hipVal = oldResult.metrics.hipMovementProxy.normalizedValue;
+
+    if (headVal !== null && headVal !== undefined) values.push(headVal);
+    if (torsoVal !== null && torsoVal !== undefined) values.push(torsoVal);
+    if (hipVal !== null && hipVal !== undefined) values.push(hipVal);
+  }
+
+  // Fallback if no valid metrics are calculated
+  if (values.length === 0) {
+    return 1.0;
   }
 
   // Calculate average displacement
-  const avgDisplacement = (head + torso + hip) / 3;
+  const avgDisplacement = values.reduce((sum, val) => sum + val, 0) / values.length;
 
   // Convert to 1-10 scale. A displacement of 0 is 10/10.
   // An average displacement of 0.6 or higher drops to 1/10.

@@ -12,7 +12,7 @@ import { MetricResultCard } from '../src/components/ui/MetricResultCard';
 import { Card } from '../src/components/ui/Card';
 import { Button } from '../src/components/ui/Button';
 import { ProgressBar } from '../src/components/ui/ProgressBar';
-import { exportToJSON, copyToClipboard } from '../src/features/analysis/analysisExporter';
+import { copyToClipboard } from '../src/features/analysis/analysisExporter';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
 import { MetricResult, ReliabilityStatus } from '../src/types/metrics';
 import { MetricResultV1 } from '../src/features/metrics/registry';
@@ -72,18 +72,16 @@ export default function ResultsScreen() {
 
   const isV1 = 'schemaVersion' in analysisResult && analysisResult.schemaVersion === '1.0';
 
-  // Adapt metrics
-  const headMovement = isV1
-    ? adaptV1ToV0((analysisResult.metrics as Record<string, MetricResultV1>).headMovement)
-    : (analysisResult.metrics as any).headMovement;
-
-  const torsoAngleChange = isV1
-    ? adaptV1ToV0((analysisResult.metrics as Record<string, MetricResultV1>).torsoAngleChange)
-    : (analysisResult.metrics as any).torsoAngleChange;
-
-  const hipMovementProxy = isV1
-    ? adaptV1ToV0((analysisResult.metrics as Record<string, MetricResultV1>).hipMovementProxy)
-    : (analysisResult.metrics as any).hipMovementProxy;
+  // Adapt metrics list dynamically instead of hardcoding individual metrics
+  const metricsList: MetricResult[] = [];
+  if (analysisResult.metrics) {
+    Object.keys(analysisResult.metrics).forEach((key) => {
+      const metric = (analysisResult.metrics as any)[key];
+      if (metric) {
+        metricsList.push(isV1 ? adaptV1ToV0(metric) : metric);
+      }
+    });
+  }
 
   const pose = analysisResult.pose;
   const processing = analysisResult.processing;
@@ -107,13 +105,15 @@ export default function ResultsScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <Text style={styles.title}>Analysis Results</Text>
-        <Text style={styles.subtitle}>Phase 0 • Schema v{analysisResult.schemaVersion}</Text>
+        <Text style={styles.subtitle}>
+          {isV1 ? 'Phase 1' : 'Phase 0'} • Schema v{analysisResult.schemaVersion}
+        </Text>
 
         {/* Metrics */}
         <Text style={styles.sectionTitle}>MEASUREMENTS</Text>
-        <MetricResultCard result={headMovement} />
-        <MetricResultCard result={torsoAngleChange} />
-        <MetricResultCard result={hipMovementProxy} />
+        {metricsList.map((metric) => (
+          <MetricResultCard key={metric.metricId} result={metric} />
+        ))}
 
         {/* Pose Quality */}
         <Text style={styles.sectionTitle}>POSE QUALITY</Text>

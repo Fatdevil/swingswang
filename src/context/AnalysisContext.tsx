@@ -90,7 +90,9 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         ...state,
         videoSource: action.payload,
         status: action.payload ? { type: 'ready' } : { type: 'idle' },
-        // Risk 5: Retain poseTimeline and analysisResult so choosing a new video doesn't wipe previous data immediately
+        poseTimeline: null,
+        analysisResult: null,
+        lastProcessedAnalysisId: null,
       };
     case 'SET_STATUS': {
       // Risk 5: Wiping results only when explicitly initiating a new process (selecting/extracting)

@@ -171,10 +171,20 @@ export class ExecuTorchPoseAdapter implements PoseEngine {
 
       let poseFrame: PoseFrame;
       if (isPixelCoords) {
-        // Pixel coordinates — estimate image dimensions from max values
-        // Use the model's default input size as reference
-        const estimatedWidth = maxX > 100 ? Math.ceil(maxX * 1.1) : 384;
-        const estimatedHeight = maxY > 100 ? Math.ceil(maxY * 1.1) : 384;
+        // Snaps to standard ExecuTorch model input resolutions to prevent aspect ratio skewing
+        let estimatedWidth = 384;
+        let estimatedHeight = 384;
+        const maxVal = Math.max(maxX, maxY);
+
+        if (maxVal > 384 && maxVal <= 640) {
+          estimatedWidth = 640;
+          estimatedHeight = 640;
+        } else if (maxVal > 640) {
+          // Fallback if model output dimensions are larger (e.g. 960 or actual original image scale)
+          estimatedWidth = Math.ceil(maxVal * 1.05);
+          estimatedHeight = Math.ceil(maxVal * 1.05);
+        }
+
         poseFrame = mapPoseOutputToFrame(
           keypoints,
           timestamp,

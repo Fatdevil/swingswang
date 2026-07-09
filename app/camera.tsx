@@ -81,6 +81,15 @@ export default function CameraScreen() {
 
   // Counter to require 2 consecutive READY snapshots (1.0 second) for stability
   const readyCounterRef = useRef(0);
+  const recordingStartedRef = useRef(false);
+
+  const resetCameraStates = () => {
+    setIsRecording(false);
+    setCameraMode('picture');
+    setCountdown(null);
+    readyCounterRef.current = 0;
+    recordingStartedRef.current = false;
+  };
 
   // Initialize Pose Engine matching native availability
   const engineAvailability = checkRealEngineAvailability();
@@ -115,7 +124,7 @@ export default function CameraScreen() {
 
   // 2 Hz Snapshot loop for setup detektor
   useEffect(() => {
-    if (isRecording || cameraMode !== 'picture' || !cameraPermission?.granted) {
+    if (isRecording || recordingStartedRef.current || cameraMode !== 'picture' || !cameraPermission?.granted) {
       return;
     }
 
@@ -161,7 +170,7 @@ export default function CameraScreen() {
         setReadiness(stabilizedResult);
 
         // Auto-capture trigger
-        if (stabilizedResult.status === 'READY' && autoCapture && !isRecording) {
+        if (stabilizedResult.status === 'READY' && autoCapture && !isRecording && !recordingStartedRef.current) {
           triggerHaptic('success');
           startAutoRecording();
         }
@@ -201,6 +210,8 @@ export default function CameraScreen() {
   };
 
   const startAutoRecording = () => {
+    if (recordingStartedRef.current) return;
+    recordingStartedRef.current = true;
     setIsRecording(true);
     let count = 3;
     setCountdown(count);
@@ -218,6 +229,8 @@ export default function CameraScreen() {
   };
 
   const startManualRecording = () => {
+    if (recordingStartedRef.current) return;
+    recordingStartedRef.current = true;
     setIsRecording(true);
     recordActiveClip();
   };
@@ -259,8 +272,8 @@ export default function CameraScreen() {
       }
     } catch (err) {
       Logger.video.error('Failed to record camera clip', { error: String(err) });
-      setIsRecording(false);
-      setCameraMode('picture');
+    } finally {
+      resetCameraStates();
     }
   };
 
@@ -268,8 +281,6 @@ export default function CameraScreen() {
     if (cameraRef.current) {
       cameraRef.current.stopRecording();
     }
-    setIsRecording(false);
-    setCameraMode('picture');
   };
 
   // Render permission screen if not granted
