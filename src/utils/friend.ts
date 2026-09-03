@@ -45,7 +45,15 @@ export async function loadFriendDataLocally(): Promise<FriendState | null> {
     const info = await getInfoAsync(FRIEND_FILE_PATH);
     if (info.exists) {
       const content = await readAsStringAsync(FRIEND_FILE_PATH);
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          myCode: typeof parsed.myCode === 'string' ? parsed.myCode : generateFriendCode(),
+          friends: Array.isArray(parsed.friends)
+            ? parsed.friends.filter((f: any) => f && typeof f.name === 'string' && typeof f.code === 'string')
+            : [],
+        };
+      }
     }
   } catch (e) {
     console.error('Failed to load friend data', e);

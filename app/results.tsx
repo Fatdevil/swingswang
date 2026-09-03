@@ -92,12 +92,24 @@ export default function ResultsScreen() {
     : (analysisResult.warnings as string[]) || [];
 
   const handleExport = async () => {
-    try {
-      await copyToClipboard(analysisResult);
-      Alert.alert('Copied', 'Analysis results copied to clipboard as JSON.');
-    } catch {
-      Alert.alert('Error', 'Failed to copy to clipboard.');
-    }
+    Alert.alert(
+      'Export Technical Data',
+      'This will copy raw diagnostic analysis JSON to your system clipboard. Do you wish to proceed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Copy JSON',
+          onPress: async () => {
+            try {
+              await copyToClipboard(analysisResult);
+              Alert.alert('Copied', 'Analysis results copied to clipboard.');
+            } catch {
+              Alert.alert('Error', 'Failed to copy to clipboard.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (

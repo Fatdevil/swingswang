@@ -30,32 +30,52 @@ export function setDebugLogging(enabled: boolean): void {
   debugEnabled = enabled;
 }
 
+/** Helper to redact full device local file URIs to avoid exposing local user paths in logs (Security S2). */
+function sanitizeLogData(data?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!data) return undefined;
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (typeof value === 'string' && (value.startsWith('file://') || value.startsWith('ph://') || value.startsWith('content://'))) {
+      const parts = value.split('/');
+      const fileName = parts[parts.length - 1] || 'file';
+      sanitized[key] = `[LOCAL_FILE].../${fileName}`;
+    } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      sanitized[key] = sanitizeLogData(value as Record<string, unknown>);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 /** Core log function. */
 function log(level: LogLevel, category: string, message: string, data?: Record<string, unknown>): void {
   if (level === LogLevel.Debug && !debugEnabled) return;
+
+  const cleanData = sanitizeLogData(data);
 
   const entry: LogEntry = {
     level,
     category,
     message,
     timestamp: Date.now(),
-    data,
+    data: cleanData,
   };
 
   const prefix = `[${level}][${category}]`;
 
   switch (level) {
     case LogLevel.Debug:
-      console.debug(prefix, message, data ?? '');
+      console.debug(prefix, message, cleanData ?? '');
       break;
     case LogLevel.Info:
-      console.info(prefix, message, data ?? '');
+      console.info(prefix, message, cleanData ?? '');
       break;
     case LogLevel.Warn:
-      console.warn(prefix, message, data ?? '');
+      console.warn(prefix, message, cleanData ?? '');
       break;
     case LogLevel.Error:
-      console.error(prefix, message, data ?? '');
+      console.error(prefix, message, cleanData ?? '');
       break;
   }
 

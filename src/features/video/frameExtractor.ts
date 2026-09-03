@@ -31,20 +31,24 @@ export async function extractFrames(
   onProgress?: (progress: number) => void,
   isCancelled?: () => boolean
 ): Promise<FrameData[]> {
-  const timer = new PerformanceTimer('extractFrames');
+  // Validate numeric input arguments (Finding 11)
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`Invalid video duration: ${duration}. Expected a finite positive number.`);
+  }
+  const safeFrameRate = Number.isFinite(frameRate) && frameRate > 0 ? frameRate : ANALYSIS_FRAME_RATE;
 
   // Enforce absolute maximum duration guardrail
   const safeDuration = Math.min(duration, MAX_ABSOLUTE_DURATION);
 
   // Calculate timestamps at the desired frame rate
-  const intervalSeconds = 1.0 / frameRate;
+  const intervalSeconds = 1.0 / safeFrameRate;
   const timestamps: number[] = [];
 
   for (let t = 0; t < safeDuration; t += intervalSeconds) {
     timestamps.push(t);
   }
 
-  Logger.video.info(`Extracting ${timestamps.length} frames at ${frameRate}fps from ${safeDuration.toFixed(1)}s video (original: ${duration.toFixed(1)}s)`);
+  Logger.video.info(`Extracting ${timestamps.length} frames at ${safeFrameRate}fps from ${safeDuration.toFixed(1)}s video (original: ${duration.toFixed(1)}s)`);
 
   const frames: FrameData[] = [];
 

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Logger } from '@/utils/logger';
 
 // Safe requires for native packages
@@ -25,13 +25,43 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
   const [autoCapture, setAutoCapture] = useState(true);
 
   const recordingStartedRef = useRef(false);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordingStartTimeRef = useRef<number | null>(null);
+
+  const clearAllTimers = () => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    if (recordingTimeoutRef.current) {
+      clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
+  };
 
   const resetCameraStates = () => {
+    clearAllTimers();
     setIsRecording(false);
     setCameraMode('picture');
     setCountdown(null);
     recordingStartedRef.current = false;
+    recordingStartTimeRef.current = null;
   };
+
+  // Unmount & focus loss cleanup guard (Finding 6)
+  useEffect(() => {
+    return () => {
+      clearAllTimers();
+      if (cameraRef.current && recordingStartedRef.current) {
+        try {
+          cameraRef.current.stopRecording();
+        } catch (e) {
+          // Ignored on unmount
+        }
+      }
+    };
+  }, []);
 
   // Haptic trigger helper
   const triggerHaptic = (type: 'success' | 'warning') => {
@@ -64,12 +94,16 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
     let count = 3;
     setCountdown(count);
 
-    const timer = setInterval(() => {
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    countdownIntervalRef.current = setInterval(() => {
       count -= 1;
       if (count > 0) {
         setCountdown(count);
       } else {
-        clearInterval(timer);
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current);
+          countdownIntervalRef.current = null;
+        }
         setCountdown(null);
         recordActiveClip();
       }
@@ -85,7 +119,6 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
 
   const recordActiveClip = async () => {
     if (!cameraRef.current) return;
-    let recordingTimeout: ReturnType<typeof setTimeout> | null = null;
     try {
       setCameraMode('video');
       // Brief pause to allow camera view mode transition
@@ -95,22 +128,31 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
         maxDuration: RECORDING_DURATION_MS / 1000,
       });
 
-      // Automatically stop recording after 5 seconds
-      recordingTimeout = setTimeout(() => {
+      recordingStartTimeRef.current = Date.now();
+
+      // Automatically stop recording after max duration
+      if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = setTimeout(() => {
         stopRecording();
       }, RECORDING_DURATION_MS);
 
       const video = await videoPromise;
-      if (recordingTimeout) {
-        clearTimeout(recordingTimeout);
-        recordingTimeout = null;
+
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
       }
+
+      // Calculate actual elapsed duration instead of hardcoding 5.0 seconds (Finding 2)
+      const actualDurationSeconds = recordingStartTimeRef.current
+        ? Math.max(0.5, Math.min(10, (Date.now() - recordingStartTimeRef.current) / 1000))
+        : RECORDING_DURATION_MS / 1000;
 
       if (video?.uri) {
         setVideoSource({
           uri: video.uri,
           metadata: {
-            duration: RECORDING_DURATION_MS / 1000,
+            duration: actualDurationSeconds,
             width: cameraLayout.width || 1080,
             height: cameraLayout.height || 1920,
             orientation: 'portrait',
@@ -119,22 +161,23 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
             mimeType: 'video/mp4',
           },
         });
-        Logger.video.info('Camera recording complete', { uri: video.uri });
+        Logger.video.info('Camera recording complete', { uri: video.uri, duration: actualDurationSeconds });
         router.replace('/');
       }
     } catch (err) {
       Logger.video.error('Failed to record camera clip', { error: String(err) });
     } finally {
-      if (recordingTimeout) {
-        clearTimeout(recordingTimeout);
-      }
       resetCameraStates();
     }
   };
 
   const stopRecording = () => {
     if (cameraRef.current) {
-      cameraRef.current.stopRecording();
+      try {
+        cameraRef.current.stopRecording();
+      } catch (e) {
+        Logger.video.warn('stopRecording failed or camera not ready', { error: String(e) });
+      }
     }
   };
 
@@ -151,3 +194,4 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
     recordingStartedRef
   };
 }
+

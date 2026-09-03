@@ -148,65 +148,45 @@ export class ExecuTorchPoseAdapter implements PoseEngine {
         return null;
       }
 
-      // Use first detection (primary person in frame)
-      const detection = detections[0];
+      // Select primary person from detections using area, center-distance, and keypoint count (Finding 10)
+      const detection = this.selectPrimaryDetection(detections, imageWidth, imageHeight);
 
       // Map ExecuTorch keypoints to our RawKeypoint format
       const keypoints = this.mapDetectionToKeypoints(detection);
 
-      // Use mapPoseOutputToFrame from landmarkMapper
-      // ExecuTorch outputs pixel coordinates, but we don't know the image
-      // dimensions from the detection itself. The keypoints are in the
-      // model's input resolution space. We pass them as normalized (0-1)
-      // if they appear to already be normalized, or as pixel coords
-      // with estimated dimensions.
-      //
-      // ExecuTorch YOLO models output pixel coordinates relative to
-      // the input image dimensions. Default inputSize is 384.
-      // However, the exact behavior depends on the model version.
-      // We'll detect the coordinate range and handle accordingly.
+      // Check max coordinates to detect if output is pixel vs normalized (Finding 3)
       const maxX = Math.max(...keypoints.filter(k => k.x >= 0).map(k => k.x), 0);
       const maxY = Math.max(...keypoints.filter(k => k.y >= 0).map(k => k.y), 0);
 
-      // If max values are > 2, assume pixel coordinates
       const isPixelCoords = maxX > 2 || maxY > 2;
 
       let poseFrame: PoseFrame;
       if (isPixelCoords) {
-        let estimatedWidth = 384;
-        let estimatedHeight = 384;
-        const maxVal = Math.max(maxX, maxY);
+        // If imageWidth/imageHeight are available, use actual image resolution for normalization
+        // to preserve exact aspect ratio (Finding 3)
+        let frameWidth = imageWidth;
+        let frameHeight = imageHeight;
 
-        // If coordinates exceed standard model resolutions, they are likely in original image resolution
-        const isOriginalResolution = maxVal > 640;
-
-        if (isOriginalResolution && imageWidth && imageHeight) {
-          estimatedWidth = imageWidth;
-          estimatedHeight = imageHeight;
-        } else {
-          // Snaps to standard ExecuTorch model input resolutions to prevent aspect ratio skewing
-          if (maxVal > 384 && maxVal <= 640) {
-            estimatedWidth = 640;
-            estimatedHeight = 640;
-          } else if (maxVal > 640) {
-            estimatedWidth = Math.ceil(maxVal * 1.05);
-            estimatedHeight = Math.ceil(maxVal * 1.05);
-          }
+        if (!frameWidth || !frameHeight) {
+          // If frame dimensions were not provided, infer from max coordinate bounds without forcing square snapping
+          const maxDim = Math.max(maxX, maxY);
+          frameWidth = maxDim > 640 ? maxDim * 1.05 : 640;
+          frameHeight = maxDim > 640 ? maxDim * 1.05 : 640;
         }
 
         const normalizedFrame = mapPoseOutputToFrame(
           keypoints,
           timestamp,
           frameIndex,
-          estimatedWidth,
-          estimatedHeight,
+          frameWidth,
+          frameHeight,
           true // pixel coords → normalize
         );
 
         poseFrame = {
           ...normalizedFrame,
-          sourceWidth: imageWidth ?? estimatedWidth,
-          sourceHeight: imageHeight ?? estimatedHeight,
+          sourceWidth: frameWidth,
+          sourceHeight: frameHeight,
         };
       } else {
         // Already normalized (0-1)
@@ -240,28 +220,78 @@ export class ExecuTorchPoseAdapter implements PoseEngine {
   }
 
   /**
+   * Select primary person detection (Finding 10).
+   * Ranks candidates by bounding box area, valid keypoints, and proximity to frame center.
+   */
+  private selectPrimaryDetection(
+    detections: ExecuTorchDetection[],
+    imageWidth?: number,
+    imageHeight?: number
+  ): ExecuTorchDetection {
+    if (detections.length === 1) return detections[0];
+
+    let bestDetection = detections[0];
+    let bestScore = -1;
+
+    for (const det of detections) {
+      let validKpCount = 0;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+      for (const name of EXECUTORCH_KEYPOINT_NAMES) {
+        const kp = det[name];
+        if (kp && kp.x !== -1 && kp.y !== -1) {
+          validKpCount++;
+          if (kp.x < minX) minX = kp.x;
+          if (kp.x > maxX) maxX = kp.x;
+          if (kp.y < minY) minY = kp.y;
+          if (kp.y > maxY) maxY = kp.y;
+        }
+      }
+
+      if (validKpCount === 0) continue;
+
+      const area = Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
+      // Normalized center distance heuristic if dimensions known
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      const refW = imageWidth || (maxX > 2 ? 640 : 1.0);
+      const refH = imageHeight || (maxY > 2 ? 640 : 1.0);
+      const distFromCenter = Math.hypot((centerX / refW) - 0.5, (centerY / refH) - 0.5);
+
+      // Score combines keypoint count (weight 0.4), area (weight 0.4), center proximity (weight 0.2)
+      const compositeScore = (validKpCount / 17) * 0.4 + Math.min(1, area / (refW * refH || 1)) * 0.4 + (1 - Math.min(1, distFromCenter)) * 0.2;
+
+      if (compositeScore > bestScore) {
+        bestScore = compositeScore;
+        bestDetection = det;
+      }
+    }
+
+    return bestDetection;
+  }
+
+  /**
    * Map ExecuTorch detection object to RawKeypoint array.
-   * ExecuTorch returns named keypoints (NOSE, LEFT_EYE, etc.).
-   * We map them to indexed array matching COCO 17-keypoint order.
-   *
-   * Keypoints with (-1, -1) are below threshold — treated as score 0.
+   * Handles per-keypoint confidence if available from model output;
+   * otherwise uses conservative provisional confidence flag (Finding 3).
    */
   private mapDetectionToKeypoints(detection: ExecuTorchDetection): RawKeypoint[] {
     return EXECUTORCH_KEYPOINT_NAMES.map((name) => {
-      const kp = detection[name];
+      const kp = detection[name] as any;
 
       if (!kp || (kp.x === -1 && kp.y === -1)) {
         // Below threshold — mark as undetected
         return { x: 0, y: 0, score: 0 };
       }
 
-      // ExecuTorch doesn't provide per-keypoint confidence scores
-      // in the detection object — only x,y. We use a fixed high
-      // confidence since the model already filtered by keypointThreshold.
+      // Check if native module provided actual keypoint score/confidence (Finding 3)
+      const rawScore = typeof kp.score === 'number' ? kp.score : typeof kp.confidence === 'number' ? kp.confidence : null;
+      const score = rawScore !== null ? Math.min(1.0, Math.max(0.0, rawScore)) : 0.70; // Conservative fallback score if model score unavailable
+
       return {
         x: kp.x,
         y: kp.y,
-        score: 0.85, // Assumed confidence for detected keypoints
+        score,
       };
     });
   }

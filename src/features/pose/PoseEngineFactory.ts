@@ -11,21 +11,25 @@ import { PoseEngineConfig, PoseEngineAvailability } from './types';
 import { MockPoseEngine } from './MockPoseEngine';
 import { Logger } from '@/utils/logger';
 
+import { isExecuTorchInitialized } from './executorchInit';
+
 /**
- * Check if a real pose engine is available in this build.
+ * Check if a real pose engine is available and initialized in this build.
  * Returns availability info without creating an engine.
  *
- * Detection strategy: try to require the native module.
- * If it throws, the native module is not linked (Expo Go / missing dep).
+ * Detection strategy: try to require the native module AND verify runtime initialization (Finding 9).
  */
 export function checkRealEngineAvailability(): PoseEngineAvailability {
   try {
     const executorch = require('react-native-executorch');
     if (executorch?.PoseEstimationModule) {
+      const isInitialized = isExecuTorchInitialized();
       return {
-        available: true,
+        available: isInitialized,
         provider: 'EXECUTORCH',
-        reason: 'react-native-executorch PoseEstimationModule detected.',
+        reason: isInitialized
+          ? 'react-native-executorch PoseEstimationModule linked and initialized.'
+          : 'react-native-executorch detected but native runtime initialization pending or failed.',
       };
     }
     return {

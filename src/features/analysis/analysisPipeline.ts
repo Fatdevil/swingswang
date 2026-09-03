@@ -122,10 +122,12 @@ export async function runAnalysisPipeline(
     // 4. Build raw timeline for quality checks
     const rawTimeline = buildTimeline(poseFrames, totalVideoFrames, pipelineTimer.elapsed(), ANALYSIS_FRAME_RATE);
 
-    // 5. Evaluate video quality
+    // 5. Evaluate video quality (Finding 4: Quality Gate)
     const qualityTimer = new PerformanceTimer('stage.quality');
     const qualityResult = evaluateVideoQuality(rawTimeline, metadata);
     stageTimings['quality'] = qualityTimer.stop();
+
+    const isQualityFailed = qualityResult.overallStatus === 'FAIL' || !qualityResult.analysisRecommended;
 
     // 6. Run pose stabilization
     const stabilizationTimer = new PerformanceTimer('stage.stabilization');
@@ -152,7 +154,17 @@ export async function runAnalysisPipeline(
     const metricsMap = registry.calculateAvailable(stabilizedTimeline, config, eventResult);
     const metrics: Record<string, MetricResultV1> = {};
     for (const [id, value] of metricsMap.entries()) {
-      metrics[id] = value;
+      // If quality check explicitly FAILED, flag metric as NOT_RELIABLE (Finding 4)
+      if (isQualityFailed) {
+        metrics[id] = {
+          ...value,
+          status: 'NOT_RELIABLE',
+          confidence: Math.min(value.confidence, 0.3),
+          warnings: [...value.warnings, 'Metric unverified due to video quality gate failure.'],
+        };
+      } else {
+        metrics[id] = value;
+      }
     }
     stageTimings['metrics'] = metricsTimer.stop();
 
@@ -167,12 +179,14 @@ export async function runAnalysisPipeline(
       ? metricKeys.reduce((acc, key) => acc + metrics[key].confidence, 0) / metricKeys.length
       : 0.0;
 
-    const overallConfidence = (
+    const rawOverallConfidence = (
       qualityResult.confidence * 0.2 +
       stabilizedTimeline.averageConfidence * 0.3 +
       eventsConfidence * 0.3 +
       metricsConfidence * 0.2
     );
+
+    const overallConfidence = isQualityFailed ? Math.min(rawOverallConfidence, 0.3) : rawOverallConfidence;
 
     const confidenceSummary: ConfidenceSummary = {
       video: qualityResult.confidence,
@@ -190,6 +204,16 @@ export async function runAnalysisPipeline(
       message: w.message,
       userMessage: w.severity === 'error' || w.severity === 'warning' ? w.message : undefined,
     }));
+
+    if (isQualityFailed) {
+      videoWarnings.unshift({
+        code: 'QUALITY_GATE_FAIL',
+        source: 'VIDEO_QUALITY',
+        severity: 'error',
+        message: 'Video quality check failed. Analysis results may be inaccurate.',
+        userMessage: 'Video failed quality standards (lighting, occlusion, or blur). Results marked unverified.',
+      });
+    }
 
     const poseWarnings: AnalysisWarning[] = [];
     if (stabilizedTimeline.averageConfidence < 0.5) {

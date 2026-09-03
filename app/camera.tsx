@@ -88,8 +88,11 @@ export default function CameraScreen() {
     router,
   });
 
+  const isAnalyzingRef = useRef(false);
+
   // Initialize Pose Engine matching native availability
   const engineAvailability = checkRealEngineAvailability();
+  const isMockEngine = !engineAvailability.available;
   const poseEngine = useMemo(() => {
     return createPoseEngine({ mode: engineAvailability.available ? 'REAL' : 'MOCK' });
   }, [engineAvailability.available]);
@@ -102,15 +105,26 @@ export default function CameraScreen() {
         await poseEngine.initialize();
         if (active) {
           setEngineReady(true);
-          setReadiness({
-            status: 'SEARCHING',
-            message: 'Searching for golfer...',
-            subtext: 'Stand in view with your full body visible.',
-            confidence: 0,
-            poseFrame: null,
-            color: 'red',
-          });
-          Logger.pose.info('Pose engine initialized successfully');
+          if (isMockEngine) {
+            setReadiness({
+              status: 'SEARCHING',
+              message: 'Position Check Unavailable',
+              subtext: 'ExecuTorch pose engine is not linked. Use manual record button.',
+              confidence: 0,
+              poseFrame: null,
+              color: 'yellow',
+            });
+          } else {
+            setReadiness({
+              status: 'SEARCHING',
+              message: 'Searching for golfer...',
+              subtext: 'Stand in view with your full body visible.',
+              confidence: 0,
+              poseFrame: null,
+              color: 'red',
+            });
+          }
+          Logger.pose.info('Pose engine initialized successfully', { isMockEngine });
         }
       } catch (err) {
         Logger.pose.error('Failed to initialize pose engine', { error: String(err) });
@@ -131,7 +145,7 @@ export default function CameraScreen() {
       active = false;
       poseEngine.dispose();
     };
-  }, [poseEngine]);
+  }, [poseEngine, isMockEngine]);
 
   // Request permissions at mount
   useEffect(() => {
@@ -143,24 +157,25 @@ export default function CameraScreen() {
     }
   }, [cameraPermission, microphonePermission]);
 
-  // 2 Hz Snapshot loop for setup detektor
+  // 2 Hz Snapshot loop for setup detector (disabled in MOCK mode to prevent synthetic false positives)
   useEffect(() => {
-    if (isRecording || recordingStartedRef.current || cameraMode !== 'picture' || !cameraPermission?.granted || !engineReady) {
+    if (isRecording || recordingStartedRef.current || cameraMode !== 'picture' || !cameraPermission?.granted || !engineReady || isMockEngine) {
       return;
     }
 
     let active = true;
 
     const runSnapshotCycle = async () => {
-      if (!active || isAnalyzingSnapshot || !cameraRef.current) return;
+      if (!active || isAnalyzingRef.current || !cameraRef.current) return;
 
+      isAnalyzingRef.current = true;
       setIsAnalyzingSnapshot(true);
       let photoUri: string | null = null;
 
       try {
         // Take picture from camera stream
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.3, // low quality downscaled photo to save CPU time (Risk 4)
+          quality: 0.3, // low quality downscaled photo to save CPU time
           skipProcessing: true,
         });
 
@@ -190,7 +205,7 @@ export default function CameraScreen() {
 
         setReadiness(stabilizedResult);
 
-        // Auto-capture trigger
+        // Auto-capture trigger (only for real pose engine)
         if (stabilizedResult.status === 'READY' && autoCapture && !isRecording && !recordingStartedRef.current) {
           triggerHaptic('success');
           startAutoRecording();
@@ -198,14 +213,15 @@ export default function CameraScreen() {
       } catch (error) {
         Logger.pose.warn('Camera snapshot analysis failed', { error: String(error) });
       } finally {
-        // Clean up temporary image file instantly (Risk 5)
+        // Clean up temporary image file instantly (Risk 5 & Finding 7)
         if (photoUri) {
           try {
             await FileSystem.deleteAsync(photoUri, { idempotent: true });
           } catch (e) {
-            // Ignored
+            Logger.video.warn('Snapshot temp file cleanup failed', { uri: photoUri, error: String(e) });
           }
         }
+        isAnalyzingRef.current = false;
         if (active) {
           setIsAnalyzingSnapshot(false);
         }
@@ -218,7 +234,7 @@ export default function CameraScreen() {
       active = false;
       clearInterval(interval);
     };
-  }, [isRecording, cameraMode, cameraPermission, poseEngine, swingConfig.cameraView, autoCapture, engineReady]);
+  }, [isRecording, cameraMode, cameraPermission, poseEngine, swingConfig.cameraView, autoCapture, engineReady, isMockEngine]);
 
   // Render permission screen if not granted
   if (!cameraPermission || !cameraPermission.granted) {
