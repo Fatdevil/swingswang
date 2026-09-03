@@ -104,19 +104,19 @@ export default function ResultsScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <Text style={styles.title}>Analysis Results</Text>
+        <Text style={styles.title} accessibilityRole="header">Analysis Results</Text>
         <Text style={styles.subtitle}>
           {isV1 ? 'Phase 1' : 'Phase 0'} • Schema v{analysisResult.schemaVersion}
         </Text>
 
         {/* Metrics */}
-        <Text style={styles.sectionTitle}>MEASUREMENTS</Text>
+        <Text style={styles.sectionTitle} accessibilityRole="header">MEASUREMENTS</Text>
         {metricsList.map((metric) => (
           <MetricResultCard key={metric.metricId} result={metric} />
         ))}
 
         {/* Pose Quality */}
-        <Text style={styles.sectionTitle}>POSE QUALITY</Text>
+        <Text style={styles.sectionTitle} accessibilityRole="header">POSE QUALITY</Text>
         <Card>
           <View style={styles.statRow}>
             <Text style={styles.statLabel}>Provider</Text>
@@ -143,7 +143,7 @@ export default function ResultsScreen() {
         </Card>
 
         {/* Processing Stats */}
-        <Text style={styles.sectionTitle}>PROCESSING</Text>
+        <Text style={styles.sectionTitle} accessibilityRole="header">PROCESSING</Text>
         <Card>
           <View style={styles.statRow}>
             <Text style={styles.statLabel}>Total time</Text>
@@ -170,10 +170,10 @@ export default function ResultsScreen() {
         {/* Warnings */}
         {warningList.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>WARNINGS</Text>
+            <Text style={styles.sectionTitle} accessibilityRole="header">WARNINGS</Text>
             <Card>
               {warningList.map((w, i) => (
-                <Text key={i} style={styles.warningText}>⚠ {w}</Text>
+                <Text key={i} style={styles.warningText} accessibilityRole="alert">⚠ {w}</Text>
               ))}
             </Card>
           </>
@@ -185,6 +185,8 @@ export default function ResultsScreen() {
             title="EXPORT JSON TO CLIPBOARD"
             onPress={handleExport}
             variant="secondary"
+            accessibilityLabel="Export analysis results to clipboard"
+            accessibilityHint="Copies the full analysis data as JSON to your clipboard"
           />
         </View>
       </ScrollView>

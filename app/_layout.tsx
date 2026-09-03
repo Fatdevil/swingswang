@@ -73,6 +73,9 @@ function NavigationLayout() {
               <Pressable
                 onPress={() => setMenuVisible(true)}
                 style={styles.plusButtonContainer}
+                accessibilityRole="button"
+                accessibilityLabel="Open swing action menu"
+                accessibilityHint="Shows options to analyze or record a swing"
               >
                 <View style={[styles.plusButton, menuVisible && styles.plusActive]}>
                   <Ionicons 
@@ -98,6 +101,7 @@ function NavigationLayout() {
           name="debug"
           options={{
             title: 'Debug',
+            href: __DEV__ ? undefined : null,
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="bug-outline" size={size} color={color} />
             ),
@@ -118,9 +122,11 @@ function NavigationLayout() {
         <Pressable 
           style={styles.modalOverlay} 
           onPress={() => setMenuVisible(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Close menu"
         >
           <View style={styles.menuContainer}>
-            <Text style={styles.menuTitle}>SWING ACTION</Text>
+            <Text style={styles.menuTitle} accessibilityRole="header">SWING ACTION</Text>
             
             <Pressable
               onPress={async () => {
@@ -132,6 +138,9 @@ function NavigationLayout() {
                 styles.menuItem,
                 pressed && styles.menuItemPressed
               ]}
+              accessibilityRole="button"
+              accessibilityLabel="Analyze swing"
+              accessibilityHint="Import a video from your gallery and begin analysis"
             >
               <Ionicons name="analytics" size={18} color={COLORS.textPrimary} />
               <Text style={styles.menuItemText}>Analyze Swing</Text>
@@ -139,6 +148,9 @@ function NavigationLayout() {
  
             <Pressable
               style={styles.menuItemDisabled}
+              accessibilityRole="button"
+              accessibilityLabel="Record Swing. Coming in Phase 1."
+              accessibilityState={{ disabled: true }}
             >
               <Ionicons name="videocam-outline" size={18} color={COLORS.textTertiary} />
               <Text style={styles.menuItemTextDisabled}>Record Swing (Phase 1)</Text>

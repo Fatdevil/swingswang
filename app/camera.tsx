@@ -14,11 +14,9 @@ import {
   SafeAreaView,
   Pressable,
   Dimensions,
-  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
 import * as FileSystem from 'expo-file-system';
 import { useAnalysis } from '../src/hooks/useAnalysis';
 import { checkRealEngineAvailability, createPoseEngine } from '../src/features/pose/PoseEngineFactory';
@@ -26,13 +24,14 @@ import { evaluateCameraSnapshot, CameraReadinessResult } from '../src/features/c
 import { SkeletonOverlay } from '../src/components/pose/SkeletonOverlay';
 import { Logger } from '../src/utils/logger';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY, BORDER_RADIUS } from '../src/constants/theme';
-import type { PoseFrame } from '../src/types/pose';
+import { SwingGuideOverlay } from '../src/components/camera/SwingGuideOverlay';
+import { CameraControls } from '../src/components/camera/CameraControls';
+import { useCameraCapture } from '../src/hooks/useCameraCapture';
 
 // Safe requires for native packages
 let CameraView: any = View;
 let useCameraPermissions: any = () => [null, () => {}];
 let useMicrophonePermissions: any = () => [null, () => {}];
-let Haptics: any = null;
 
 try {
   const expoCamera = require('expo-camera');
@@ -43,16 +42,9 @@ try {
   Logger.pose.warn('expo-camera not linked natively.');
 }
 
-try {
-  Haptics = require('expo-haptics');
-} catch (e) {
-  Logger.pose.warn('expo-haptics not linked natively.');
-}
-
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SNAPSHOT_INTERVAL_MS = 500;
-const RECORDING_DURATION_MS = 5000;
 
 export default function CameraScreen() {
   const router = useRouter();
@@ -62,13 +54,9 @@ export default function CameraScreen() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
 
-  const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
-  const [isRecording, setIsRecording] = useState(false);
   const [isAnalyzingSnapshot, setIsAnalyzingSnapshot] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
-  const [autoCapture, setAutoCapture] = useState(true);
-
   const [engineReady, setEngineReady] = useState(false);
+  
   // Snapshot readiness states
   const [readiness, setReadiness] = useState<CameraReadinessResult>({
     status: 'SEARCHING',
@@ -82,15 +70,23 @@ export default function CameraScreen() {
 
   // Counter to require 2 consecutive READY snapshots (1.0 second) for stability
   const readyCounterRef = useRef(0);
-  const recordingStartedRef = useRef(false);
 
-  const resetCameraStates = () => {
-    setIsRecording(false);
-    setCameraMode('picture');
-    setCountdown(null);
-    readyCounterRef.current = 0;
-    recordingStartedRef.current = false;
-  };
+  const {
+    cameraMode,
+    isRecording,
+    countdown,
+    autoCapture,
+    setAutoCapture,
+    handleRecordPress,
+    startAutoRecording,
+    triggerHaptic,
+    recordingStartedRef
+  } = useCameraCapture({
+    cameraRef,
+    cameraLayout,
+    setVideoSource,
+    router,
+  });
 
   // Initialize Pose Engine matching native availability
   const engineAvailability = checkRealEngineAvailability();
@@ -146,21 +142,6 @@ export default function CameraScreen() {
       requestMicrophonePermission();
     }
   }, [cameraPermission, microphonePermission]);
-
-  // Haptic trigger helper
-  const triggerHaptic = (type: 'success' | 'warning') => {
-    if (Haptics) {
-      try {
-        if (type === 'success') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } else {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        }
-      } catch (err) {
-        // Ignored in non-native environments
-      }
-    }
-  };
 
   // 2 Hz Snapshot loop for setup detektor
   useEffect(() => {
@@ -239,162 +220,26 @@ export default function CameraScreen() {
     };
   }, [isRecording, cameraMode, cameraPermission, poseEngine, swingConfig.cameraView, autoCapture, engineReady]);
 
-  // Handle manual record press
-  const handleRecordPress = () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      triggerHaptic('success');
-      startManualRecording();
-    }
-  };
-
-  const startAutoRecording = () => {
-    if (recordingStartedRef.current) return;
-    recordingStartedRef.current = true;
-    setIsRecording(true);
-    let count = 3;
-    setCountdown(count);
-
-    const timer = setInterval(() => {
-      count -= 1;
-      if (count > 0) {
-        setCountdown(count);
-      } else {
-        clearInterval(timer);
-        setCountdown(null);
-        recordActiveClip();
-      }
-    }, 1000);
-  };
-
-  const startManualRecording = () => {
-    if (recordingStartedRef.current) return;
-    recordingStartedRef.current = true;
-    setIsRecording(true);
-    recordActiveClip();
-  };
-
-  const recordActiveClip = async () => {
-    if (!cameraRef.current) return;
-    let recordingTimeout: ReturnType<typeof setTimeout> | null = null;
-    try {
-      setCameraMode('video');
-      // Brief pause to allow camera view mode transition
-      await new Promise((r) => setTimeout(r, 200));
-
-      const videoPromise = cameraRef.current.recordAsync({
-        maxDuration: RECORDING_DURATION_MS / 1000,
-      });
-
-      // Automatically stop recording after 5 seconds
-      recordingTimeout = setTimeout(() => {
-        stopRecording();
-      }, RECORDING_DURATION_MS);
-
-      const video = await videoPromise;
-      if (recordingTimeout) {
-        clearTimeout(recordingTimeout);
-        recordingTimeout = null;
-      }
-
-      if (video?.uri) {
-        setVideoSource({
-          uri: video.uri,
-          metadata: {
-            duration: RECORDING_DURATION_MS / 1000,
-            width: cameraLayout.width || 1080,
-            height: cameraLayout.height || 1920,
-            orientation: 'portrait',
-            frameRate: 30,
-            fileSize: 0,
-            mimeType: 'video/mp4',
-          },
-        });
-        Logger.video.info('Camera recording complete', { uri: video.uri });
-        router.replace('/');
-      }
-    } catch (err) {
-      Logger.video.error('Failed to record camera clip', { error: String(err) });
-    } finally {
-      if (recordingTimeout) {
-        clearTimeout(recordingTimeout);
-      }
-      resetCameraStates();
-    }
-  };
-
-  const stopRecording = () => {
-    if (cameraRef.current) {
-      cameraRef.current.stopRecording();
-    }
-  };
-
   // Render permission screen if not granted
   if (!cameraPermission || !cameraPermission.granted) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.permissionContainer}>
-          <Ionicons name="camera-outline" size={64} color={COLORS.textTertiary} />
-          <Text style={styles.permissionTitle}>Camera Access Required</Text>
+          <Ionicons name="camera-outline" size={64} color={COLORS.textTertiary} accessibilityElementsHidden={true} />
+          <Text style={styles.permissionTitle} accessibilityRole="header">Camera Access Required</Text>
           <Text style={styles.permissionText}>
             We need camera access to capture your swing and perform biomechanical pose checks.
           </Text>
-          <Pressable style={styles.permissionBtn} onPress={requestCameraPermission}>
+          <Pressable style={styles.permissionBtn} onPress={requestCameraPermission} accessibilityRole="button" accessibilityLabel="Grant camera permission">
             <Text style={styles.permissionBtnText}>Grant Permission</Text>
           </Pressable>
-          <Pressable style={styles.backBtnGhost} onPress={() => router.back()}>
+          <Pressable style={styles.backBtnGhost} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back to home screen">
             <Text style={styles.backBtnGhostText}>Go Back</Text>
           </Pressable>
         </View>
       </SafeAreaView>
     );
   }
-
-  // Get matching guide silhouette path based on view selection
-  const renderGuideSilhouette = () => {
-    if (swingConfig.cameraView === 'FO') {
-      // Face On (FO) standing profile guide
-      return (
-        <Svg width="200" height="360" viewBox="0 0 200 360" style={styles.silhouette}>
-          {/* Head */}
-          <Circle cx="100" cy="50" r="22" stroke="rgba(255,255,255,0.4)" strokeWidth="3" fill="none" />
-          {/* Spine & Body */}
-          <Line x1="100" y1="72" x2="100" y2="180" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
-          {/* Shoulders */}
-          <Line x1="70" y1="85" x2="130" y2="85" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
-          {/* Hips */}
-          <Line x1="75" y1="180" x2="125" y2="180" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
-          {/* Left Leg */}
-          <Line x1="75" y1="180" x2="65" y2="300" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
-          {/* Right Leg */}
-          <Line x1="125" y1="180" x2="135" y2="300" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
-          {/* Left Arm */}
-          <Line x1="70" y1="85" x2="90" y2="170" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
-          {/* Right Arm */}
-          <Line x1="130" y1="85" x2="110" y2="170" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
-          {/* Golf Club representation */}
-          <Path d="M 100,170 L 150,280 M 145,280 L 155,285" stroke="rgba(255,255,255,0.3)" strokeWidth="2" fill="none" />
-        </Svg>
-      );
-    } else {
-      // Down The Line (DTL) bent stance profile guide
-      return (
-        <Svg width="200" height="360" viewBox="0 0 200 360" style={styles.silhouette}>
-          {/* Head */}
-          <Circle cx="120" cy="70" r="22" stroke="rgba(255,255,255,0.4)" strokeWidth="3" fill="none" />
-          {/* Bent spine */}
-          <Path d="M 120,92 Q 105,120 85,160" stroke="rgba(255,255,255,0.4)" strokeWidth="3" fill="none" />
-          {/* Hips to ankles (profile bent leg) */}
-          <Path d="M 85,160 L 75,225 L 85,310" stroke="rgba(255,255,255,0.4)" strokeWidth="3" fill="none" />
-          {/* Hanging profile arms */}
-          <Line x1="108" y1="105" x2="125" y2="190" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
-          {/* Club representation */}
-          <Path d="M 125,190 L 175,270 M 170,270 L 180,275" stroke="rgba(255,255,255,0.3)" strokeWidth="2" fill="none" />
-        </Svg>
-      );
-    }
-  };
 
   const getReadinessColor = (color: string) => {
     switch (color) {
@@ -418,7 +263,7 @@ export default function CameraScreen() {
         }}
       >
         {/* Render Silhouette Overlay */}
-        {!isRecording && renderGuideSilhouette()}
+        {!isRecording && <SwingGuideOverlay cameraView={swingConfig.cameraView} />}
 
         {/* Real-time Golfer Skeleton HUD Overlay */}
         {!isRecording && readiness.poseFrame && (
@@ -434,10 +279,10 @@ export default function CameraScreen() {
         {/* Status Callout Banner */}
         <SafeAreaView style={styles.hudOverlay}>
           <View style={styles.header}>
-            <Pressable style={styles.circleBtn} onPress={() => router.back()}>
+            <Pressable style={styles.circleBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Close camera and go back">
               <Ionicons name="close" size={24} color="#FFFFFF" />
             </Pressable>
-            <View style={styles.badgeContainer}>
+            <View style={styles.badgeContainer} accessible={true} accessibilityLabel={`Camera view: ${swingConfig.cameraView === 'FO' ? 'Face On' : 'Down the Line'}`}>
               <Text style={styles.badgeText}>
                 {swingConfig.cameraView === 'FO' ? 'Face On' : 'Down the Line'}
               </Text>
@@ -447,7 +292,7 @@ export default function CameraScreen() {
 
           {/* Setup HUD status card */}
           {!isRecording && (
-            <View style={[styles.statusCard, { borderColor: getReadinessColor(readiness.color) }]}>
+            <View style={[styles.statusCard, { borderColor: getReadinessColor(readiness.color) }]} accessible={true} accessibilityRole="alert" accessibilityLabel={`${readiness.message}. ${readiness.subtext}`}>
               <View style={styles.statusRow}>
                 <View style={[styles.statusDot, { backgroundColor: getReadinessColor(readiness.color) }]} />
                 <Text style={styles.statusTitle}>{readiness.message}</Text>
@@ -458,14 +303,14 @@ export default function CameraScreen() {
 
           {/* Countdown indicator */}
           {countdown !== null && (
-            <View style={styles.countdownContainer}>
+            <View style={styles.countdownContainer} accessible={true} accessibilityRole="alert" accessibilityLabel={`Recording starts in ${countdown}`}>
               <Text style={styles.countdownText}>{countdown}</Text>
             </View>
           )}
 
           {/* Recording indicator */}
           {isRecording && countdown === null && (
-            <View style={styles.recordingIndicator}>
+            <View style={styles.recordingIndicator} accessible={true} accessibilityRole="alert" accessibilityLabel="Recording swing in progress">
               <View style={styles.redDot} />
               <Text style={styles.recordingText}>RECORDING SWING</Text>
             </View>
@@ -473,41 +318,13 @@ export default function CameraScreen() {
         </SafeAreaView>
 
         {/* Bottom controls */}
-        <View style={styles.bottomBar}>
-          {/* Toggle Auto Capture */}
-          <Pressable
-            style={[styles.toggleBtn, autoCapture && styles.toggleBtnActive]}
-            onPress={() => setAutoCapture(!autoCapture)}
-          >
-            <Ionicons
-              name={autoCapture ? 'flash' : 'flash-off'}
-              size={20}
-              color={autoCapture ? '#FFFFFF' : COLORS.textSecondary}
-            />
-            <Text style={[styles.toggleBtnText, autoCapture && styles.toggleBtnTextActive]}>
-              Auto-Capture: {autoCapture ? 'ON' : 'OFF'}
-            </Text>
-          </Pressable>
-
-          {/* Record button */}
-          <View style={styles.recordRow}>
-            <Pressable
-              style={[
-                styles.recordOuterCircle,
-                isRecording && styles.recordOuterActive,
-                readiness.status === 'READY' && !isRecording && styles.recordOuterReady,
-              ]}
-              onPress={handleRecordPress}
-            >
-              <View
-                style={[
-                  styles.recordInnerCircle,
-                  isRecording ? styles.recordInnerActive : styles.recordInnerIdle,
-                ]}
-              />
-            </Pressable>
-          </View>
-        </View>
+        <CameraControls
+          isRecording={isRecording}
+          autoCapture={autoCapture}
+          readinessStatus={readiness.status}
+          onToggleAutoCapture={() => setAutoCapture(!autoCapture)}
+          onRecordPress={handleRecordPress}
+        />
       </CameraView>
     </View>
   );
@@ -556,13 +373,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: FONT_SIZE.xs,
     fontWeight: FONT_WEIGHT.bold as any,
-  },
-  silhouette: {
-    position: 'absolute',
-    top: '22%',
-    left: '50%',
-    marginLeft: -100,
-    opacity: 0.8,
   },
   statusCard: {
     backgroundColor: 'rgba(0,0,0,0.85)',
@@ -632,74 +442,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontWeight: FONT_WEIGHT.bold as any,
     letterSpacing: 1.5,
-  },
-  bottomBar: {
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    paddingVertical: SPACING.xl,
-    paddingHorizontal: SPACING.lg,
-    borderTopLeftRadius: BORDER_RADIUS.lg,
-    borderTopRightRadius: BORDER_RADIUS.lg,
-    alignItems: 'center',
-    gap: SPACING.lg,
-  },
-  toggleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-  },
-  toggleBtnActive: {
-    backgroundColor: COLORS.accent,
-    borderColor: 'transparent',
-  },
-  toggleBtnText: {
-    fontFamily: FONT_FAMILY,
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZE.xs,
-    fontWeight: FONT_WEIGHT.medium as any,
-  },
-  toggleBtnTextActive: {
-    color: '#FFFFFF',
-    fontWeight: FONT_WEIGHT.bold as any,
-  },
-  recordRow: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-  },
-  recordOuterCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  recordOuterReady: {
-    borderColor: '#10B981',
-  },
-  recordOuterActive: {
-    borderColor: '#EF4444',
-  },
-  recordInnerCircle: {
-    borderRadius: 25,
-  },
-  recordInnerIdle: {
-    width: 50,
-    height: 50,
-    backgroundColor: '#FFFFFF',
-  },
-  recordInnerActive: {
-    width: 32,
-    height: 32,
-    backgroundColor: '#EF4444',
-    borderRadius: 4,
   },
   permissionContainer: {
     flex: 1,
