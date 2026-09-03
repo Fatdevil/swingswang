@@ -16,9 +16,10 @@ interface UseCameraCaptureProps {
   cameraLayout: { width: number; height: number };
   setVideoSource: (source: any) => void;
   router: any;
+  requestMicrophonePermission?: () => Promise<any>;
 }
 
-export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, router }: UseCameraCaptureProps) {
+export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, router, requestMicrophonePermission }: UseCameraCaptureProps) {
   const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
   const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -120,6 +121,15 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
   const recordActiveClip = async () => {
     if (!cameraRef.current) return;
     try {
+      // Request microphone permission just-in-time before recording (Finding 19)
+      if (requestMicrophonePermission) {
+        try {
+          await requestMicrophonePermission();
+        } catch (e) {
+          Logger.video.warn('Microphone permission request failed', { error: String(e) });
+        }
+      }
+
       setCameraMode('video');
       // Brief pause to allow camera view mode transition
       await new Promise((r) => setTimeout(r, 200));

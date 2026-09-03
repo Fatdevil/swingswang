@@ -105,6 +105,9 @@ export function FriendsCard({ myCode, friends, streakCount, onAddFriend }: Frien
           <View style={styles.friendsHeaderLeft}>
             <Ionicons name="people" size={22} color={COLORS.accent} />
             <Text style={styles.friendsTitle}>FRIENDS SYSTEM</Text>
+            <View style={styles.demoBadge}>
+              <Text style={styles.demoBadgeText}>DEMO</Text>
+            </View>
           </View>
           <Text style={styles.friendsCount}>{friends.length} active</Text>
         </View>
@@ -132,6 +135,13 @@ export function FriendsCard({ myCode, friends, streakCount, onAddFriend }: Frien
 
             {/* Scrollable layout inside modal */}
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              {/* Demo disclaimer (Finding 14) */}
+              <View style={styles.demoDisclaimer}>
+                <Ionicons name="information-circle-outline" size={14} color={COLORS.warning} />
+                <Text style={styles.demoDisclaimerText}>
+                  Demo mode — friends and streaks are stored locally on this device only.
+                </Text>
+              </View>
               {/* Input section */}
               <View style={styles.inputSection}>
                 <Text style={styles.sectionLabel}>Add Friend Code</Text>
@@ -393,5 +403,37 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.xs,
     fontWeight: FONT_WEIGHT.semibold as any,
+  },
+  demoBadge: {
+    backgroundColor: 'rgba(251, 191, 36, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.3)',
+  },
+  demoBadgeText: {
+    fontFamily: FONT_FAMILY,
+    color: '#FBBF24',
+    fontSize: 9,
+    fontWeight: '700' as any,
+    letterSpacing: 1,
+  },
+  demoDisclaimer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(251, 191, 36, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.2)',
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  demoDisclaimerText: {
+    fontFamily: FONT_FAMILY,
+    color: COLORS.textTertiary,
+    fontSize: FONT_SIZE.xs,
+    flex: 1,
   },
 });

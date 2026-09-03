@@ -95,33 +95,38 @@ async function getFallbackDuration(uri: string): Promise<number> {
       // Check if duration is already ready
       if (player.duration > 0) {
         const d = player.duration;
-        player.release();
+        try { player.release(); } catch (_) { /* ignore */ }
         resolve(d);
         return;
       }
 
+      // Idempotent finish guard to prevent double resolve/release (Finding 10)
+      let settled = false;
       let subscription: any = null;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+
+      const finish = (duration: number, source: string) => {
+        if (settled) return;
+        settled = true;
+        if (timeout) clearTimeout(timeout);
+        if (subscription) {
+          try { subscription.remove(); } catch (_) { /* ignore */ }
+        }
+        try { player.release(); } catch (_) { /* ignore */ }
+        Logger.video.info(`Fallback duration resolved via ${source}: ${duration}s`);
+        resolve(duration);
+      };
 
       // Timeout fallback
-      const timeout = setTimeout(() => {
-        if (subscription) {
-          subscription.remove();
-        }
+      timeout = setTimeout(() => {
         const d = player.duration || 0;
-        player.release();
         Logger.video.warn(`Fallback duration extraction timed out, using: ${d}s`);
-        resolve(d);
+        finish(d, 'timeout');
       }, 2000);
 
       subscription = player.addListener('statusChange', (status: string) => {
         if ((status === 'readyToPlay' || player.status === 'readyToPlay') && player.duration > 0) {
-          clearTimeout(timeout);
-          if (subscription) {
-            subscription.remove();
-          }
-          const d = player.duration;
-          player.release();
-          resolve(d);
+          finish(player.duration, 'statusChange');
         }
       });
     } catch (e) {

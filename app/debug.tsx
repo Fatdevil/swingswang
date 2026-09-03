@@ -15,6 +15,22 @@ import { LANDMARK_NAMES, LandmarkID } from '../src/types/landmarks';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
 import { isAnalysisResultV1 } from '../src/types/analysisV1';
 export default function DebugScreen() {
+  // Production guard — block access even via deep links (Finding 18)
+  if (!__DEV__) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
+          <Text style={{ color: COLORS.textPrimary, fontSize: FONT_SIZE.lg, fontFamily: FONT_FAMILY, fontWeight: '700' as any, marginBottom: 8 }}>
+            Not Available
+          </Text>
+          <Text style={{ color: COLORS.textTertiary, fontSize: FONT_SIZE.sm, fontFamily: FONT_FAMILY, textAlign: 'center' }}>
+            Debug console is only available in development builds.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const { analysisResult, poseTimeline, status, videoSource } = useAnalysis();
   const [showLogs, setShowLogs] = useState(false);
   const [showRawJSON, setShowRawJSON] = useState(false);

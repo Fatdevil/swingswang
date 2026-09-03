@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
+import { deleteAsync } from 'expo-file-system/legacy';
 import { useAnalysis } from '../src/hooks/useAnalysis';
 import { checkRealEngineAvailability, createPoseEngine } from '../src/features/pose/PoseEngineFactory';
 import { evaluateCameraSnapshot, CameraReadinessResult } from '../src/features/camera/cameraReadiness';
@@ -86,6 +86,7 @@ export default function CameraScreen() {
     cameraLayout,
     setVideoSource,
     router,
+    requestMicrophonePermission,
   });
 
   const isAnalyzingRef = useRef(false);
@@ -147,15 +148,12 @@ export default function CameraScreen() {
     };
   }, [poseEngine, isMockEngine]);
 
-  // Request permissions at mount
+  // Request camera permission at mount (microphone deferred to recording start — Finding 19)
   useEffect(() => {
     if (cameraPermission && !cameraPermission.granted) {
       requestCameraPermission();
     }
-    if (microphonePermission && !microphonePermission.granted) {
-      requestMicrophonePermission();
-    }
-  }, [cameraPermission, microphonePermission]);
+  }, [cameraPermission]);
 
   // 2 Hz Snapshot loop for setup detector (disabled in MOCK mode to prevent synthetic false positives)
   useEffect(() => {
@@ -216,7 +214,7 @@ export default function CameraScreen() {
         // Clean up temporary image file instantly (Risk 5 & Finding 7)
         if (photoUri) {
           try {
-            await FileSystem.deleteAsync(photoUri, { idempotent: true });
+            await deleteAsync(photoUri, { idempotent: true });
           } catch (e) {
             Logger.video.warn('Snapshot temp file cleanup failed', { uri: photoUri, error: String(e) });
           }

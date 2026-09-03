@@ -333,15 +333,15 @@ export async function runAnalysisPipeline(
     throw error;
   } finally {
     engine.dispose();
-    // Clean up temporary extracted frames to prevent storage leaks
+    // Clean up temporary extracted frames to prevent storage leaks (Finding 7: use legacy API consistently)
     if (frames && frames.length > 0) {
       try {
-        const FileSystem = require('expo-file-system');
-        if (FileSystem && FileSystem.deleteAsync) {
+        const { deleteAsync } = require('expo-file-system/legacy');
+        if (deleteAsync) {
           for (const frame of frames) {
             if (frame.imageUri) {
               try {
-                await FileSystem.deleteAsync(frame.imageUri, { idempotent: true });
+                await deleteAsync(frame.imageUri, { idempotent: true });
               } catch (e) {
                 Logger.video.warn(`Failed to clean up temporary frame: ${frame.imageUri}`, { error: String(e) });
               }
