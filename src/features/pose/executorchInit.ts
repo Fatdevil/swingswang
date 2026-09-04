@@ -3,6 +3,7 @@
  * SwingSwang – Pose Engine
  *
  * Initializes react-native-executorch with the Expo resource fetcher.
+ * Kept for future model loading (MoveNet/RTMPose) if MediaPipe doesn't work out.
  * Must be called once at app startup before any ExecuTorch modules are used.
  *
  * Safe to call in Expo Go — will log a warning and return false.

@@ -93,39 +93,42 @@ export default function CameraScreen() {
 
   // Initialize Pose Engine matching native availability
   const engineAvailability = checkRealEngineAvailability();
-  const isMockEngine = !engineAvailability.available;
+  const isRealEngineAvailable = engineAvailability.available;
   const poseEngine = useMemo(() => {
-    return createPoseEngine({ mode: engineAvailability.available ? 'REAL' : 'MOCK' });
-  }, [engineAvailability.available]);
+    if (!isRealEngineAvailable) return null;
+    return createPoseEngine({ mode: 'REAL' });
+  }, [isRealEngineAvailable]);
 
   // Handle pose engine lifecycle initialization
   useEffect(() => {
+    if (!poseEngine) {
+      setEngineReady(false);
+      setReadiness({
+        status: 'SEARCHING',
+        message: 'Position Check Unavailable',
+        subtext: 'Real pose engine is not linked. Use manual record button.',
+        confidence: 0,
+        poseFrame: null,
+        color: 'yellow',
+      });
+      return;
+    }
+
     let active = true;
     const init = async () => {
       try {
         await poseEngine.initialize();
         if (active) {
           setEngineReady(true);
-          if (isMockEngine) {
-            setReadiness({
-              status: 'SEARCHING',
-              message: 'Position Check Unavailable',
-              subtext: 'ExecuTorch pose engine is not linked. Use manual record button.',
-              confidence: 0,
-              poseFrame: null,
-              color: 'yellow',
-            });
-          } else {
-            setReadiness({
-              status: 'SEARCHING',
-              message: 'Searching for golfer...',
-              subtext: 'Stand in view with your full body visible.',
-              confidence: 0,
-              poseFrame: null,
-              color: 'red',
-            });
-          }
-          Logger.pose.info('Pose engine initialized successfully', { isMockEngine });
+          setReadiness({
+            status: 'SEARCHING',
+            message: 'Searching for golfer...',
+            subtext: 'Stand in view with your full body visible.',
+            confidence: 0,
+            poseFrame: null,
+            color: 'red',
+          });
+          Logger.pose.info('Pose engine initialized successfully');
         }
       } catch (err) {
         Logger.pose.error('Failed to initialize pose engine', { error: String(err) });
@@ -144,9 +147,9 @@ export default function CameraScreen() {
     init();
     return () => {
       active = false;
-      poseEngine.dispose();
+      poseEngine.dispose?.();
     };
-  }, [poseEngine, isMockEngine]);
+  }, [poseEngine]);
 
   // Request camera permission at mount (microphone deferred to recording start — Finding 19)
   useEffect(() => {
@@ -155,9 +158,9 @@ export default function CameraScreen() {
     }
   }, [cameraPermission]);
 
-  // 2 Hz Snapshot loop for setup detector (disabled in MOCK mode to prevent synthetic false positives)
+  // 2 Hz Snapshot loop for setup detector
   useEffect(() => {
-    if (isRecording || recordingStartedRef.current || cameraMode !== 'picture' || !cameraPermission?.granted || !engineReady || isMockEngine) {
+    if (isRecording || recordingStartedRef.current || cameraMode !== 'picture' || !cameraPermission?.granted || !engineReady || !poseEngine) {
       return;
     }
 
@@ -232,7 +235,7 @@ export default function CameraScreen() {
       active = false;
       clearInterval(interval);
     };
-  }, [isRecording, cameraMode, cameraPermission, poseEngine, swingConfig.cameraView, autoCapture, engineReady, isMockEngine]);
+  }, [isRecording, cameraMode, cameraPermission, poseEngine, swingConfig.cameraView, autoCapture, engineReady]);
 
   // Render permission screen if not granted
   if (!cameraPermission || !cameraPermission.granted) {

@@ -70,7 +70,7 @@ export default function ResultsScreen() {
     );
   }
 
-  const isV1 = 'schemaVersion' in analysisResult && analysisResult.schemaVersion === '1.0';
+  const isV1OrV2 = 'schemaVersion' in analysisResult && (analysisResult.schemaVersion === '1.0' || analysisResult.schemaVersion === '2.0.0');
 
   // Adapt metrics list dynamically instead of hardcoding individual metrics
   const metricsList: MetricResult[] = [];
@@ -78,7 +78,7 @@ export default function ResultsScreen() {
     Object.keys(analysisResult.metrics).forEach((key) => {
       const metric = (analysisResult.metrics as any)[key];
       if (metric) {
-        metricsList.push(isV1 ? adaptV1ToV0(metric) : metric);
+        metricsList.push(isV1OrV2 ? adaptV1ToV0(metric) : metric);
       }
     });
   }
@@ -87,7 +87,7 @@ export default function ResultsScreen() {
   const processing = analysisResult.processing;
 
   // Extract warnings list
-  const warningList: string[] = isV1
+  const warningList: string[] = isV1OrV2
     ? (analysisResult.warnings as any).userFacing || []
     : (analysisResult.warnings as string[]) || [];
 
@@ -118,7 +118,7 @@ export default function ResultsScreen() {
         {/* Header */}
         <Text style={styles.title} accessibilityRole="header">Analysis Results</Text>
         <Text style={styles.subtitle}>
-          {isV1 ? 'Phase 1' : 'Phase 0'} • Schema v{analysisResult.schemaVersion}
+          {isV1OrV2 ? 'Phase 1+' : 'Phase 0'} • Schema v{analysisResult.schemaVersion}
         </Text>
 
         {/* Metrics */}

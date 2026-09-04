@@ -7,7 +7,7 @@
  * Pipeline sequence:
  * VideoUri → Extract Frames → Pose Detection → Raw Timeline → Quality Check
  * → Pose Stabilization → Event Detection → Metrics Calculation → Confidence Scopes
- * → Warning Aggregation → AnalysisResultV1
+ * → Warning Aggregation → AnalysisResultV2
  */
 
 import { ProcessingStatus } from '@/types/pose';
@@ -29,22 +29,25 @@ import { createDefaultRegistry } from '@/features/metrics/defaultRegistry';
 import { MetricResultV1 } from '@/features/metrics/registry';
 import { SwingConfig } from '@/types/swing';
 import {
-  AnalysisResultV1,
+  AnalysisResultV2,
   generateAnalysisId,
-  PoseSummaryV1,
-  ProcessingStatsV1,
+  PoseSummaryV2,
+  ProcessingStatsV2,
   ConfidenceSummary,
-} from '@/types/analysisV1';
+  VersionMetadataV2,
+  PipelineTrace,
+  PipelineStageTrace,
+} from '@/types/analysisV2';
 import { WarningCollection, AnalysisWarning, aggregateWarnings } from '@/types/warnings';
 
 /** Pipeline result including timeline for video player overlay. */
 export interface PipelineResult {
-  readonly analysisResult: AnalysisResultV1;
+  readonly analysisResult: AnalysisResultV2;
   readonly timeline: PoseTimeline;
 }
 
 /**
- * Run the complete V1 analysis pipeline.
+ * Run the complete V2 analysis pipeline.
  *
  * Enforces quality check, stabilization, event detection, metric calculation,
  * confidence scoring, and structured warnings aggregation.
@@ -66,18 +69,33 @@ export async function runAnalysisPipeline(
     club: 'DRIVER',
   };
 
-  const engine = createPoseEngine(engineConfig ?? { mode: 'MOCK' });
+  if (!engineConfig) {
+    throw new Error('engineConfig is required — the pipeline must not default to mock mode.');
+  }
+  const engine = createPoseEngine(engineConfig);
   let frames: any[] = [];
 
   try {
     const stageTimings: Record<string, number> = {};
- 
+    const stageTraces: PipelineStageTrace[] = [];
+
     // 1. Initialize pose engine
+    const initStartMs = pipelineTimer.elapsed();
     const initTimer = new PerformanceTimer('stage.init');
     await engine.initialize();
-    stageTimings['init'] = initTimer.stop();
- 
+    const initDurationMs = initTimer.stop();
+    stageTimings['init'] = initDurationMs;
+    stageTraces.push({
+      name: 'init',
+      startMs: initStartMs,
+      durationMs: initDurationMs,
+      status: 'OK',
+      inputSummary: { engine: engine.name },
+      outputSummary: { state: 'initialized' },
+    });
+
     // 2. Extract frames
+    const extStartMs = pipelineTimer.elapsed();
     onStatus({ type: 'extracting', progress: 0 });
     const extractionTimer = new PerformanceTimer('stage.extraction');
     frames = await extractFrames(
@@ -87,15 +105,25 @@ export async function runAnalysisPipeline(
       (progress) => onStatus({ type: 'extracting', progress }),
       isCancelled
     );
-    stageTimings['extraction'] = extractionTimer.stop();
- 
+    const extDurationMs = extractionTimer.stop();
+    stageTimings['extraction'] = extDurationMs;
+    stageTraces.push({
+      name: 'extraction',
+      startMs: extStartMs,
+      durationMs: extDurationMs,
+      status: frames.length > 0 ? 'OK' : 'ERROR',
+      inputSummary: { duration: metadata.duration },
+      outputSummary: { framesExtracted: frames.length },
+    });
+
     if (frames.length === 0) {
       throw new Error('No frames could be extracted from the video.');
     }
- 
+
     Logger.video.info(`Extracted ${frames.length} frames`);
- 
+
     // 3. Run pose detection
+    const poseStartMs = pipelineTimer.elapsed();
     onStatus({ type: 'analyzing', progress: 0, framesComplete: 0, framesTotal: frames.length });
     const poseTimer = new PerformanceTimer('stage.pose');
     const poseFrames = await processVideoFrames(
@@ -111,7 +139,16 @@ export async function runAnalysisPipeline(
       metadata.width,
       metadata.height
     );
-    stageTimings['pose'] = poseTimer.stop();
+    const poseDurationMs = poseTimer.stop();
+    stageTimings['pose'] = poseDurationMs;
+    stageTraces.push({
+      name: 'pose',
+      startMs: poseStartMs,
+      durationMs: poseDurationMs,
+      status: poseFrames.length > 0 ? 'OK' : 'ERROR',
+      inputSummary: { frames: frames.length },
+      outputSummary: { trackedFrames: poseFrames.length },
+    });
 
     if (poseFrames.length === 0) {
       throw new Error('No person detected in any frame. Ensure the golfer is visible in the video.');
@@ -123,13 +160,23 @@ export async function runAnalysisPipeline(
     const rawTimeline = buildTimeline(poseFrames, totalVideoFrames, pipelineTimer.elapsed(), ANALYSIS_FRAME_RATE);
 
     // 5. Evaluate video quality (Finding 4: Quality Gate)
+    const qualStartMs = pipelineTimer.elapsed();
     const qualityTimer = new PerformanceTimer('stage.quality');
     const qualityResult = evaluateVideoQuality(rawTimeline, metadata);
-    stageTimings['quality'] = qualityTimer.stop();
-
+    const qualDurationMs = qualityTimer.stop();
+    stageTimings['quality'] = qualDurationMs;
     const isQualityFailed = qualityResult.overallStatus === 'FAIL' || !qualityResult.analysisRecommended;
+    stageTraces.push({
+      name: 'quality',
+      startMs: qualStartMs,
+      durationMs: qualDurationMs,
+      status: isQualityFailed ? 'WARN' : 'OK',
+      inputSummary: { timeline: 'raw' },
+      outputSummary: { status: qualityResult.overallStatus },
+    });
 
     // 6. Run pose stabilization
+    const stabStartMs = pipelineTimer.elapsed();
     const stabilizationTimer = new PerformanceTimer('stage.stabilization');
     const stabilizationResult = stabilizePoseTimeline(poseFrames);
     const stabilizedFrames = stabilizationResult.frames;
@@ -139,22 +186,42 @@ export async function runAnalysisPipeline(
       pipelineTimer.elapsed(),
       ANALYSIS_FRAME_RATE
     );
-    stageTimings['stabilization'] = stabilizationTimer.stop();
+    const stabDurationMs = stabilizationTimer.stop();
+    stageTimings['stabilization'] = stabDurationMs;
+    const stabReport = stabilizationResult.report;
+    stageTraces.push({
+      name: 'stabilization',
+      startMs: stabStartMs,
+      durationMs: stabDurationMs,
+      status: stabReport.outliersDetected > stabReport.totalFrames * 0.2 ? 'WARN' : 'OK',
+      inputSummary: { frames: poseFrames.length },
+      outputSummary: { outliers: stabReport.outliersDetected },
+    });
 
     // 7. Detect swing events
+    const eventsStartMs = pipelineTimer.elapsed();
     const eventsTimer = new PerformanceTimer('stage.events');
     const eventDetector = new RuleBasedSwingEventDetectorV1();
     const eventResult = eventDetector.detect(stabilizedTimeline, config);
-    stageTimings['events'] = eventsTimer.stop();
+    const eventsDurationMs = eventsTimer.stop();
+    stageTimings['events'] = eventsDurationMs;
+    stageTraces.push({
+      name: 'events',
+      startMs: eventsStartMs,
+      durationMs: eventsDurationMs,
+      status: eventResult.warnings.length > 0 ? 'WARN' : 'OK',
+      inputSummary: { timeline: 'stabilized' },
+      outputSummary: { detectedEvents: eventResult.detectedCount },
+    });
 
     // 8. Calculate all metrics using registry
+    const metricsStartMs = pipelineTimer.elapsed();
     onStatus({ type: 'calculating' });
     const metricsTimer = new PerformanceTimer('stage.metrics');
     const registry = createDefaultRegistry();
     const metricsMap = registry.calculateAvailable(stabilizedTimeline, config, eventResult);
     const metrics: Record<string, MetricResultV1> = {};
     for (const [id, value] of metricsMap.entries()) {
-      // If quality check explicitly FAILED, flag metric as NOT_RELIABLE (Finding 4)
       if (isQualityFailed) {
         metrics[id] = {
           ...value,
@@ -166,9 +233,19 @@ export async function runAnalysisPipeline(
         metrics[id] = value;
       }
     }
-    stageTimings['metrics'] = metricsTimer.stop();
+    const metricsDurationMs = metricsTimer.stop();
+    stageTimings['metrics'] = metricsDurationMs;
+    stageTraces.push({
+      name: 'metrics',
+      startMs: metricsStartMs,
+      durationMs: metricsDurationMs,
+      status: isQualityFailed ? 'WARN' : 'OK',
+      inputSummary: { events: eventResult.detectedCount },
+      outputSummary: { metricsCount: Object.keys(metrics).length },
+    });
 
     // 9. Calculate confidence summary
+    const confStartMs = pipelineTimer.elapsed();
     const detectedEvents = eventResult.events.filter(e => e.timestampMs !== null);
     const eventsConfidence = detectedEvents.length > 0
       ? detectedEvents.reduce((acc, curr) => acc + curr.confidence, 0) / detectedEvents.length
@@ -195,8 +272,18 @@ export async function runAnalysisPipeline(
       metrics: metricsConfidence,
       overall: Math.min(1.0, Math.max(0.0, overallConfidence)),
     };
+    const confDurationMs = pipelineTimer.elapsed() - confStartMs;
+    stageTraces.push({
+      name: 'confidence',
+      startMs: confStartMs,
+      durationMs: confDurationMs,
+      status: 'OK',
+      inputSummary: { source: 'metrics & events' },
+      outputSummary: { overallScore: overallConfidence },
+    });
 
     // 10. Aggregate warnings
+    const warnStartMs = pipelineTimer.elapsed();
     const videoWarnings: AnalysisWarning[] = qualityResult.warnings.map(w => ({
       code: w.code,
       source: 'VIDEO_QUALITY',
@@ -227,7 +314,6 @@ export async function runAnalysisPipeline(
     }
 
     const stabWarnings: AnalysisWarning[] = [];
-    const stabReport = stabilizationResult.report;
     if (stabReport.outliersDetected > stabReport.totalFrames * 0.2) {
       stabWarnings.push({
         code: 'HIGH_JITTER_OUTLIERS',
@@ -266,11 +352,20 @@ export async function runAnalysisPipeline(
       eventWarnings,
       metricWarnings,
     );
+    const warnDurationMs = pipelineTimer.elapsed() - warnStartMs;
+    stageTraces.push({
+      name: 'warnings',
+      startMs: warnStartMs,
+      durationMs: warnDurationMs,
+      status: warnings.technical.length > 0 ? 'WARN' : 'OK',
+      inputSummary: { source: 'pipeline results' },
+      outputSummary: { warningCount: warnings.technical.length },
+    });
 
     // 11. Build result structures
     const totalTimeMs = pipelineTimer.stop();
 
-    const processing: ProcessingStatsV1 = {
+    const processing: ProcessingStatsV2 = {
       totalTimeMs,
       framesExtracted: frames.length,
       framesAnalyzed: poseFrames.length,
@@ -283,7 +378,7 @@ export async function runAnalysisPipeline(
       pipelineStages: stageTimings,
     };
 
-    const poseSummaryV1: PoseSummaryV1 = {
+    const poseSummaryV2: PoseSummaryV2 = {
       providerName: engine.name,
       providerVersion: engine.version,
       landmarkCount: engine.landmarkCount,
@@ -294,26 +389,38 @@ export async function runAnalysisPipeline(
       engineMode: engineConfig?.mode === 'REAL' ? 'REAL' : 'MOCK',
     };
 
-    const analysisResult: AnalysisResultV1 = {
-      schemaVersion: '1.0',
+    const pipelineTrace: PipelineTrace = {
+      stages: stageTraces,
+      totalDurationMs: totalTimeMs,
+      engineProvider: engine.name,
+      engineVersion: engine.version,
+    };
+
+    const version: VersionMetadataV2 = {
+      appVersion: '1.0.0',
+      schemaVersion: '2.0.0',
+      poseEngineVersion: engine.version,
+      eventDetectorVersion: eventDetector.version,
+    };
+
+    const analysisResult: AnalysisResultV2 = {
+      schemaVersion: '2.0.0',
       analysisId: generateAnalysisId(),
       timestamp: new Date().toISOString(),
+      subject: 'SELF_ADULT',
+      audiencePolicy: { type: 'ADULT_SELF', policyVersion: '1.0.0' },
       video: metadata,
       swingConfig: config,
       processing,
-      pose: poseSummaryV1,
+      pose: poseSummaryV2,
       quality: qualityResult,
       stabilization: stabReport,
       events: eventResult,
       metrics,
       confidence: confidenceSummary,
       warnings,
-      version: {
-        appVersion: '1.0.0',
-        schemaVersion: '1.0',
-        poseEngineVersion: engine.version,
-        eventDetectorVersion: eventDetector.version,
-      },
+      version,
+      pipelineTrace,
     };
 
     onStatus({ type: 'completed' });

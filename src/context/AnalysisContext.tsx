@@ -10,7 +10,7 @@ import { ProcessingStatus } from '../types/pose';
 import { VideoSource } from '../types/video';
 import { Logger } from '../utils/logger';
 import { AnalysisResult } from '../types/analysis';
-import { AnalysisResultV1 } from '../types/analysisV1';
+import { AnalysisResultV2 } from '../types/analysisV2';
 import { SwingConfig } from '../types/swing';
 import { PoseTimeline } from '../features/timeline/PoseTimeline';
 import { calculateSwingScore } from '../utils/score';
@@ -30,7 +30,7 @@ export interface AnalysisState {
   videoSource: VideoSource | null;
   status: ProcessingStatus;
   poseTimeline: PoseTimeline | null;
-  analysisResult: AnalysisResult | AnalysisResultV1 | null;
+  analysisResult: AnalysisResult | AnalysisResultV2 | null;
   debugMode: boolean;
   history: number[];
   isHistoryLoaded: boolean;
@@ -72,7 +72,7 @@ type Action =
   | { type: 'SET_VIDEO'; payload: VideoSource | null }
   | { type: 'SET_STATUS'; payload: ProcessingStatus }
   | { type: 'SET_TIMELINE'; payload: PoseTimeline | null }
-  | { type: 'SET_RESULT'; payload: AnalysisResult | AnalysisResultV1 | null }
+  | { type: 'SET_RESULT'; payload: AnalysisResult | AnalysisResultV2 | null }
   | { type: 'SET_SWING_CONFIG'; payload: SwingConfig }
   | { type: 'LOAD_HISTORY'; payload: number[] }
   | { type: 'CLEAR_HISTORY' }

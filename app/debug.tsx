@@ -14,6 +14,7 @@ import { getRecentLogs, LogEntry, LogLevel } from '../src/utils/logger';
 import { LANDMARK_NAMES, LandmarkID } from '../src/types/landmarks';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
 import { isAnalysisResultV1 } from '../src/types/analysisV1';
+import { PipelineTrace } from '../src/types/analysisV2';
 export default function DebugScreen() {
   // Production guard — block access even via deep links (Finding 18)
   if (!__DEV__) {
@@ -97,50 +98,67 @@ export default function DebugScreen() {
           </Card>
         )}
 
-        {/* V1 Diagnostics */}
-        {analysisResult && isAnalysisResultV1(analysisResult) && (() => {
-          const v1 = analysisResult;
+        {/* V1/V2 Diagnostics */}
+        {analysisResult && ('schemaVersion' in analysisResult) && (() => {
+          const res = analysisResult as any;
           return (
             <>
+              {/* Pipeline Trace */}
+              {'pipelineTrace' in res && (
+                <Card title="Pipeline Trace" style={styles.section}>
+                  <Text style={styles.mono}>Total time: {res.pipelineTrace.totalDurationMs.toFixed(0)}ms</Text>
+                  <Text style={styles.mono}>Engine: {res.pipelineTrace.engineProvider} v{res.pipelineTrace.engineVersion}</Text>
+                  <Text style={styles.mono}>Subject: {res.subject}</Text>
+                  <Text style={styles.mono}>Audience: {res.audiencePolicy.type} (v{res.audiencePolicy.policyVersion})</Text>
+                  <View style={{ marginTop: 8 }}>
+                    {res.pipelineTrace.stages.map((stage: any, idx: number) => (
+                      <Text key={stage.name + idx} style={[styles.mono, { color: stage.status === 'ERROR' ? COLORS.error : stage.status === 'WARN' ? COLORS.warning : COLORS.success }]}>
+                        [{stage.status}] {stage.name.padEnd(14, ' ')} {stage.durationMs.toFixed(0).padStart(5, ' ')}ms
+                      </Text>
+                    ))}
+                  </View>
+                </Card>
+              )}
+
               {/* Confidence summary */}
-              <Card title="V1 Confidence Scores" style={styles.section}>
-                <Text style={styles.mono}>Overall: {(v1.confidence.overall * 100).toFixed(0)}%</Text>
-                <Text style={styles.mono}>Video quality: {(v1.confidence.video * 100).toFixed(0)}%</Text>
-                <Text style={styles.mono}>Pose estimation: {(v1.confidence.pose * 100).toFixed(0)}%</Text>
-                <Text style={styles.mono}>Swing events: {(v1.confidence.events * 100).toFixed(0)}%</Text>
-                <Text style={styles.mono}>Biomechanics: {(v1.confidence.metrics * 100).toFixed(0)}%</Text>
+              <Card title="Confidence Scores" style={styles.section}>
+                <Text style={styles.mono}>Overall: {(res.confidence.overall * 100).toFixed(0)}%</Text>
+                <Text style={styles.mono}>Video quality: {(res.confidence.video * 100).toFixed(0)}%</Text>
+                <Text style={styles.mono}>Pose estimation: {(res.confidence.pose * 100).toFixed(0)}%</Text>
+                <Text style={styles.mono}>Swing events: {(res.confidence.events * 100).toFixed(0)}%</Text>
+                <Text style={styles.mono}>Biomechanics: {(res.confidence.metrics * 100).toFixed(0)}%</Text>
               </Card>
 
               {/* Quality gate */}
-              {v1.quality && (
+              {res.quality && (
                 <Card title="Video Quality Gate" style={styles.section}>
-                  <Text style={styles.mono}>Overall status: {v1.quality.overallStatus}</Text>
-                  <Text style={styles.mono}>Confidence: {(v1.quality.confidence * 100).toFixed(0)}%</Text>
-                  <Text style={styles.mono}>Body visibility: {v1.quality.checks.bodyVisibility.status}</Text>
-                  <Text style={styles.mono}>Golfer size: {v1.quality.checks.golferSize.status} (ratio: {(v1.quality.checks.golferSize.bodyRatio * 100).toFixed(1)}%)</Text>
-                  <Text style={styles.mono}>Pose coverage: {v1.quality.checks.poseCoverage.status} (reliable ratio: {(v1.quality.checks.poseCoverage.reliableRatio * 100).toFixed(1)}%)</Text>
-                  <Text style={styles.mono}>Video suitability: {v1.quality.checks.videoSuitability.status}</Text>
+                  <Text style={styles.mono}>Overall status: {res.quality.overallStatus}</Text>
+                  <Text style={styles.mono}>Confidence: {(res.quality.confidence * 100).toFixed(0)}%</Text>
+                  <Text style={styles.mono}>Body visibility: {res.quality.checks.bodyVisibility.status}</Text>
+                  <Text style={styles.mono}>Golfer size: {res.quality.checks.golferSize.status} (ratio: {(res.quality.checks.golferSize.bodyRatio * 100).toFixed(1)}%)</Text>
+                  <Text style={styles.mono}>Pose coverage: {res.quality.checks.poseCoverage.status} (reliable ratio: {(res.quality.checks.poseCoverage.reliableRatio * 100).toFixed(1)}%)</Text>
+                  <Text style={styles.mono}>Video suitability: {res.quality.checks.videoSuitability.status}</Text>
                 </Card>
               )}
 
               {/* Stabilization report */}
-              {v1.stabilization && (
+              {res.stabilization && (
                 <Card title="Stabilization Report" style={styles.section}>
-                  <Text style={styles.mono}>Total frames: {v1.stabilization.totalFrames}</Text>
-                  <Text style={styles.mono}>Filtered landmarks: {v1.stabilization.landmarksFiltered}</Text>
-                  <Text style={styles.mono}>Outliers removed: {v1.stabilization.outliersDetected}</Text>
-                  <Text style={styles.mono}>Gaps interpolated: {v1.stabilization.gapsInterpolated}</Text>
-                  <Text style={styles.mono}>Gaps rejected: {v1.stabilization.gapsRejected}</Text>
-                  <Text style={styles.mono}>Adaptive smoothing: {v1.stabilization.smoothingApplied ? 'Yes' : 'No'}</Text>
+                  <Text style={styles.mono}>Total frames: {res.stabilization.totalFrames}</Text>
+                  <Text style={styles.mono}>Filtered landmarks: {res.stabilization.landmarksFiltered}</Text>
+                  <Text style={styles.mono}>Outliers removed: {res.stabilization.outliersDetected}</Text>
+                  <Text style={styles.mono}>Gaps interpolated: {res.stabilization.gapsInterpolated}</Text>
+                  <Text style={styles.mono}>Gaps rejected: {res.stabilization.gapsRejected}</Text>
+                  <Text style={styles.mono}>Adaptive smoothing: {res.stabilization.smoothingApplied ? 'Yes' : 'No'}</Text>
                 </Card>
               )}
 
               {/* Swing events */}
-              {v1.events && (
+              {res.events && (
                 <Card title="Detected Swing Events" style={styles.section}>
-                  <Text style={styles.mono}>Total detected: {v1.events.detectedCount}</Text>
-                  <Text style={styles.mono}>Reliable events: {v1.events.reliableCount}</Text>
-                  {v1.events.events.map((e, idx) => (
+                  <Text style={styles.mono}>Total detected: {res.events.detectedCount}</Text>
+                  <Text style={styles.mono}>Reliable events: {res.events.reliableCount}</Text>
+                  {res.events.events.map((e: any, idx: number) => (
                     <Text key={e.event + idx} style={styles.mono}>
                       • {e.event}: {e.timestampMs !== null ? `${(e.timestampMs / 1000).toFixed(3)}s` : 'Not detected'} ({e.status}, {Math.round(e.confidence * 100)}%)
                     </Text>
@@ -148,10 +166,10 @@ export default function DebugScreen() {
                 </Card>
               )}
 
-              {/* V1 Metrics */}
-              <Card title="Registered Metrics (V1)" style={styles.section}>
-                {Object.keys(v1.metrics).map((key) => {
-                  const metric = v1.metrics[key];
+              {/* Metrics */}
+              <Card title="Registered Metrics" style={styles.section}>
+                {Object.keys(res.metrics).map((key) => {
+                  const metric = res.metrics[key];
                   return (
                     <Text key={key} style={styles.mono}>
                       • {metric.name} ({metric.id}): {metric.value !== null ? metric.value.toFixed(2) : 'null'} {metric.unit} ({metric.status}, {Math.round(metric.confidence * 100)}%)

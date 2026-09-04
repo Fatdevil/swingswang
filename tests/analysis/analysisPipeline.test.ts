@@ -9,7 +9,7 @@ import { runAnalysisPipeline } from '@/features/analysis/analysisPipeline';
 import { VideoMetadata } from '@/types/video';
 import { SwingConfig } from '@/types/swing';
 import { PoseTimeline } from '@/features/timeline/PoseTimeline';
-import { isAnalysisResultV1 } from '@/types/analysisV1';
+import { isAnalysisResultV2 } from '@/types/analysisV2';
 
 // Mock native Expo modules
 jest.mock('expo-video-thumbnails', () => ({
@@ -57,8 +57,8 @@ describe('runAnalysisPipeline V1 Integration', () => {
 
     const r = result.analysisResult;
 
-    // Invariant 1: schemaVersion is exactly '1.0'
-    expect(r.schemaVersion).toBe('1.0');
+    // Invariant 1: schemaVersion is exactly '2.0.0'
+    expect(r.schemaVersion).toBe('2.0.0');
 
     // Invariant 2: Unique analysis ID is generated and correctly formatted
     expect(r.analysisId).toBeDefined();
@@ -72,6 +72,13 @@ describe('runAnalysisPipeline V1 Integration', () => {
     expect(r.video.duration).toBe(mockMetadata.duration);
     expect(r.video.width).toBe(mockMetadata.width);
     expect(r.video.height).toBe(mockMetadata.height);
+
+    // Check new V2 fields
+    expect(r.subject).toBe('SELF_ADULT');
+    expect(r.audiencePolicy).toBeDefined();
+    expect(r.audiencePolicy.type).toBe('ADULT_SELF');
+    expect(r.pipelineTrace).toBeDefined();
+    expect(r.pipelineTrace.stages.length).toBeGreaterThan(0);
 
     // Invariant 5: SwingConfig matches input
     expect(r.swingConfig.cameraView).toBe(mockSwingConfig.cameraView);
@@ -164,8 +171,8 @@ describe('runAnalysisPipeline V1 Integration', () => {
       mockSwingConfig
     );
 
-    expect(isAnalysisResultV1(result.analysisResult)).toBe(true);
-    expect(isAnalysisResultV1({})).toBe(false);
-    expect(isAnalysisResultV1(null)).toBe(false);
+    expect(isAnalysisResultV2(result.analysisResult)).toBe(true);
+    expect(isAnalysisResultV2({})).toBe(false);
+    expect(isAnalysisResultV2(null)).toBe(false);
   });
 });

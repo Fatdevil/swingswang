@@ -37,6 +37,8 @@ export async function extractFrames(
   }
   const safeFrameRate = Number.isFinite(frameRate) && frameRate > 0 ? frameRate : ANALYSIS_FRAME_RATE;
 
+  const timer = new PerformanceTimer('extractFrames');
+
   // Enforce absolute maximum duration guardrail
   const safeDuration = Math.min(duration, MAX_ABSOLUTE_DURATION);
 

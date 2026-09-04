@@ -11,8 +11,6 @@ import { PoseEngineConfig, PoseEngineAvailability } from './types';
 import { MockPoseEngine } from './MockPoseEngine';
 import { Logger } from '@/utils/logger';
 
-import { isExecuTorchInitialized } from './executorchInit';
-
 /**
  * Check if a real pose engine is available and initialized in this build.
  * Returns availability info without creating an engine.
@@ -21,29 +19,24 @@ import { isExecuTorchInitialized } from './executorchInit';
  */
 export function checkRealEngineAvailability(): PoseEngineAvailability {
   try {
-    const executorch = require('react-native-executorch');
-    if (executorch?.PoseEstimationModule) {
-      const isInitialized = isExecuTorchInitialized();
+    const mediapipe = require('@/modules/mediapipe-pose');
+    if (mediapipe) {
       return {
-        available: isInitialized,
-        provider: 'EXECUTORCH',
-        reason: isInitialized
-          ? 'react-native-executorch PoseEstimationModule linked and initialized.'
-          : 'react-native-executorch detected but native runtime initialization pending or failed.',
+        available: true,
+        provider: 'MEDIAPIPE',
+        reason: 'MediaPipe Pose Landmarker available.',
       };
     }
     return {
       available: false,
       provider: null,
-      reason: 'react-native-executorch loaded but PoseEstimationModule not found.',
+      reason: 'No real pose engine available. MediaPipe module not installed.',
     };
   } catch {
     return {
       available: false,
       provider: null,
-      reason:
-        'react-native-executorch native module not available. ' +
-        'Requires a Development Build (not Expo Go).',
+      reason: 'No real pose engine available. MediaPipe module not installed.',
     };
   }
 }
@@ -72,10 +65,10 @@ export function createPoseEngine(config: PoseEngineConfig): PoseEngine {
     );
   }
 
-  if (availability.provider === 'EXECUTORCH') {
-    const { ExecuTorchPoseAdapter } = require('./ExecuTorchPoseAdapter');
-    Logger.pose.info('Creating ExecuTorchPoseAdapter (real mode)');
-    return new ExecuTorchPoseAdapter();
+  if (availability.provider === 'MEDIAPIPE') {
+    const { MediaPipePoseAdapter } = require('./MediaPipePoseAdapter');
+    Logger.pose.info('Creating MediaPipePoseAdapter (real mode)');
+    return new MediaPipePoseAdapter();
   }
 
   throw new Error(`Unsupported pose engine provider: ${availability.provider}`);
