@@ -1,0 +1,26 @@
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'expo.modules.plugin'
+
+android {
+  namespace 'expo.modules.mediapipepose'
+  compileSdk 34
+
+  defaultConfig {
+    minSdk 24
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  implementation 'com.google.mediapipe:tasks-vision:0.10.21'
+}

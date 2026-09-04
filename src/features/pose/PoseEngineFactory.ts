@@ -19,7 +19,7 @@ import { Logger } from '@/utils/logger';
  */
 export function checkRealEngineAvailability(): PoseEngineAvailability {
   try {
-    const mediapipe = require('@/modules/mediapipe-pose');
+    const mediapipe = require('../../../modules/mediapipe-pose');
     if (mediapipe) {
       return {
         available: true,
