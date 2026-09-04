@@ -318,7 +318,7 @@ export default function R0VerifyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.backgroundPrimary,
+    backgroundColor: COLORS.background,
   },
   scroll: {
     padding: SPACING.md,
@@ -364,7 +364,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: COLORS.backgroundTertiary,
+    backgroundColor: COLORS.card,
     color: COLORS.textSecondary,
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY,
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
   resultBlock: {
     marginTop: 12,
     padding: 12,
-    backgroundColor: COLORS.backgroundTertiary,
+    backgroundColor: COLORS.card,
     borderRadius: 8,
   },
   mono: {
