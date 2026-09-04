@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# MediaPipe model files (downloaded by scripts/download-models.sh)
+android/app/src/main/assets/*.task
