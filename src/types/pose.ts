@@ -26,6 +26,18 @@ export interface PoseFrame {
   readonly sourceHeight: number;
   /** Processing time for this frame in milliseconds. */
   readonly processingTimeMs: number;
+  /**
+   * Extended landmarks from the native provider (e.g. all 33 MediaPipe points).
+   * Present only when the provider returns more landmarks than the canonical set.
+   * Each entry has { x, y, z, visibility, presence } in normalized coordinates.
+   */
+  readonly extendedLandmarks?: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+    readonly visibility: number;
+    readonly presence: number;
+  }[];
 }
 
 /** Summary of landmark availability across a timeline. */

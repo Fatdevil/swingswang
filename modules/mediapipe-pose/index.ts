@@ -1,61 +1,109 @@
+/**
+ * MediaPipe Pose Landmarker — Expo Module JS API
+ *
+ * Wraps native Android (Kotlin) and iOS (Swift) MediaPipe Pose Landmarker
+ * via Expo Modules API. Provides image detection and full video processing
+ * with frame-accurate timestamps from the video decoder.
+ *
+ * License: Apache 2.0 (MediaPipe) — no AGPL/YOLO code.
+ */
 import MediaPipePoseModule from './src/MediaPipePoseModule';
 
-export interface PoseLandmark {
-  x: number;
-  y: number;
-  z: number;
-  visibility: number;
-  presence: number;
+// ── Types ────────────────────────────────────────────────────────────
+
+export type MediaPipeModelVariant = 'lite' | 'full' | 'heavy';
+
+export interface MediaPipeLandmark {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly visibility: number;
+  readonly presence: number;
 }
 
-export interface PoseDetectionResult {
-  landmarks: PoseLandmark[];
-  worldLandmarks: PoseLandmark[];
-  timestampMs: number;
+export interface MediaPipeFrameResult {
+  readonly timestampMs: number;
+  readonly landmarks: readonly MediaPipeLandmark[];
+  readonly worldLandmarks: readonly MediaPipeLandmark[];
+  readonly inferenceDurationMs: number;
 }
 
-export type ModelVariant = 'lite' | 'full' | 'heavy';
+export interface MediaPipeVideoResult {
+  readonly frames: readonly MediaPipeFrameResult[];
+  readonly sourceDurationMs: number;
+  readonly decodedFrameCount: number;
+  readonly processedFrameCount: number;
+  readonly samplingSkippedFrameCount: number;
+  readonly decodeDroppedFrameCount: number;
+  readonly modelVariant: MediaPipeModelVariant;
+}
+
+// ── API ──────────────────────────────────────────────────────────────
 
 /**
- * Detect pose landmarks from an image file.
- * @param imageUri - Local file URI to the image
- * @param modelVariant - 'lite', 'full', or 'heavy'
- * @returns Array of detected poses (usually 1 for single person)
+ * Check if MediaPipe Pose Landmarker is available for the given model variant.
+ * Returns true if the native module is loaded AND the .task model file
+ * exists in the app's assets.
  */
-export async function detectPose(
-  imageUri: string,
-  modelVariant: ModelVariant = 'lite'
-): Promise<PoseDetectionResult[]> {
-  return MediaPipePoseModule.detectPose(imageUri, modelVariant);
-}
-
-/**
- * Initialize the pose landmarker with a specific model variant.
- * Call this before detectPose for faster first inference.
- * @param modelVariant - 'lite', 'full', or 'heavy'
- */
-export async function initialize(
-  modelVariant: ModelVariant = 'lite'
-): Promise<void> {
-  return MediaPipePoseModule.initialize(modelVariant);
-}
-
-/**
- * Release the pose landmarker resources.
- */
-export async function release(): Promise<void> {
-  return MediaPipePoseModule.release();
-}
-
-/**
- * Check if the module is available in this build.
- */
-export function isAvailable(): boolean {
+export async function isAvailable(
+  modelVariant: MediaPipeModelVariant = 'lite'
+): Promise<boolean> {
   try {
-    return !!MediaPipePoseModule;
+    if (!MediaPipePoseModule) return false;
+    return await MediaPipePoseModule.isAvailable(modelVariant);
   } catch {
     return false;
   }
+}
+
+/**
+ * Detect pose landmarks from a single image file.
+ *
+ * @param imageUri — Local file URI (file:// or content://)
+ * @param modelVariant — 'lite', 'full', or 'heavy'
+ * @returns Single frame result with 33 landmarks + world landmarks
+ */
+export async function detectImage(
+  imageUri: string,
+  modelVariant: MediaPipeModelVariant = 'lite'
+): Promise<MediaPipeFrameResult> {
+  return MediaPipePoseModule.detectImage(imageUri, modelVariant);
+}
+
+/**
+ * Process a video file with native frame decoding and pose inference.
+ *
+ * Uses MediaExtractor + MediaCodec for frame-accurate timestamps
+ * and MediaPipe PoseLandmarker in VIDEO running mode for temporal
+ * tracking consistency.
+ *
+ * @param videoUri — Local file URI
+ * @param modelVariant — 'lite', 'full', or 'heavy'
+ * @param samplingPolicy — targetFps and optional maxFrames
+ * @returns Video result with all processed frames and decode statistics
+ */
+export async function processVideo(
+  videoUri: string,
+  modelVariant: MediaPipeModelVariant = 'lite',
+  samplingPolicy: {
+    targetFps: number;
+    maxFrames?: number;
+  } = { targetFps: 15 }
+): Promise<MediaPipeVideoResult> {
+  return MediaPipePoseModule.processVideo(
+    videoUri,
+    modelVariant,
+    samplingPolicy.targetFps,
+    samplingPolicy.maxFrames ?? 0 // 0 = unlimited
+  );
+}
+
+/**
+ * Release all native PoseLandmarker resources.
+ * Call when analysis is complete to free GPU/memory.
+ */
+export async function release(): Promise<void> {
+  return MediaPipePoseModule.release();
 }
 
 export default MediaPipePoseModule;

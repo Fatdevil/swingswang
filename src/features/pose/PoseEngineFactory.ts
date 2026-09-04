@@ -15,22 +15,22 @@ import { Logger } from '@/utils/logger';
  * Check if a real pose engine is available and initialized in this build.
  * Returns availability info without creating an engine.
  *
- * Detection strategy: try to require the native module AND verify runtime initialization (Finding 9).
+ * Detection strategy: try to require the native module AND verify it exists.
  */
 export function checkRealEngineAvailability(): PoseEngineAvailability {
   try {
     const mediapipe = require('../../../modules/mediapipe-pose');
-    if (mediapipe) {
+    if (mediapipe && typeof mediapipe.isAvailable === 'function') {
       return {
         available: true,
         provider: 'MEDIAPIPE',
-        reason: 'MediaPipe Pose Landmarker available.',
+        reason: 'MediaPipe Pose Landmarker module loaded.',
       };
     }
     return {
       available: false,
       provider: null,
-      reason: 'No real pose engine available. MediaPipe module not installed.',
+      reason: 'MediaPipe module loaded but isAvailable not found.',
     };
   } catch {
     return {
@@ -67,8 +67,9 @@ export function createPoseEngine(config: PoseEngineConfig): PoseEngine {
 
   if (availability.provider === 'MEDIAPIPE') {
     const { MediaPipePoseAdapter } = require('./MediaPipePoseAdapter');
-    Logger.pose.info('Creating MediaPipePoseAdapter (real mode)');
-    return new MediaPipePoseAdapter();
+    const variant = config.modelVariant ?? 'lite';
+    Logger.pose.info(`Creating MediaPipePoseAdapter (real mode, variant: ${variant})`);
+    return new MediaPipePoseAdapter(variant);
   }
 
   throw new Error(`Unsupported pose engine provider: ${availability.provider}`);
