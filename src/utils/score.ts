@@ -7,11 +7,12 @@
 
 import { AnalysisResult } from '../types/analysis';
 import { AnalysisResultV1 } from '../types/analysisV1';
+import { AnalysisResultV2 } from '../types/analysisV2';
 
-export function calculateSwingScore(result: AnalysisResult | AnalysisResultV1): number {
+export function calculateSwingScore(result: AnalysisResult | AnalysisResultV1 | AnalysisResultV2): number {
   const values: number[] = [];
 
-  if ('schemaVersion' in result && result.schemaVersion === '1.0') {
+  if ('schemaVersion' in result && (result.schemaVersion === '1.0' || result.schemaVersion === '2.0.0')) {
     const headVal = result.metrics['headMovement']?.normalizedValue;
     const torsoVal = result.metrics['torsoAngleChange']?.normalizedValue;
     const hipVal = result.metrics['hipMovementProxy']?.normalizedValue;

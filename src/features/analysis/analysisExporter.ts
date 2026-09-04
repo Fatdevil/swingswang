@@ -1,19 +1,20 @@
 import { AnalysisResult } from '../../types/analysis';
 import { AnalysisResultV1 } from '../../types/analysisV1';
+import { AnalysisResultV2 } from '../../types/analysisV2';
 import * as Clipboard from 'expo-clipboard';
 import { Logger } from '../../utils/logger';
 
 /**
  * Export an AnalysisResult as pretty-printed JSON.
  */
-export function exportToJSON(result: AnalysisResult | AnalysisResultV1): string {
+export function exportToJSON(result: AnalysisResult | AnalysisResultV1 | AnalysisResultV2): string {
   return JSON.stringify(result, null, 2);
 }
 
 /**
  * Copy analysis result JSON to clipboard.
  */
-export async function copyToClipboard(result: AnalysisResult | AnalysisResultV1): Promise<void> {
+export async function copyToClipboard(result: AnalysisResult | AnalysisResultV1 | AnalysisResultV2): Promise<void> {
   try {
     const json = exportToJSON(result);
     await Clipboard.setStringAsync(json);

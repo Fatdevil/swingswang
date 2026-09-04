@@ -25,6 +25,8 @@ interface ButtonProps {
   disabled?: boolean;
   loading?: boolean;
   style?: ViewStyle;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export function Button({
@@ -34,6 +36,8 @@ export function Button({
   disabled = false,
   loading = false,
   style,
+  accessibilityLabel,
+  accessibilityHint,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
 
@@ -42,6 +46,8 @@ export function Button({
       onPress={onPress}
       disabled={isDisabled}
       activeOpacity={0.7}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       style={[
         styles.base,
         variantStyles[variant],

@@ -70,7 +70,8 @@ export default function ResultsScreen() {
     );
   }
 
-  const isV1OrV2 = 'schemaVersion' in analysisResult && (analysisResult.schemaVersion === '1.0' || analysisResult.schemaVersion === '2.0.0');
+  const schemaVer = 'schemaVersion' in analysisResult ? String(analysisResult.schemaVersion) : '';
+  const isV1OrV2 = schemaVer === '1.0' || schemaVer === '2.0.0';
 
   // Adapt metrics list dynamically instead of hardcoding individual metrics
   const metricsList: MetricResult[] = [];

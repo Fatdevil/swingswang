@@ -11,11 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/Card';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY, BORDER_RADIUS } from '@/constants/theme';
 
-interface SwingConfig {
-  cameraView: 'FO' | 'DTL';
-  handedness: 'RIGHT' | 'LEFT';
-  club: 'DRIVER' | 'MID_IRON' | 'WEDGE' | 'OTHER';
-}
+import { SwingConfig } from '@/types/swing';
 
 interface SwingSetupCardProps {
   swingConfig: SwingConfig;
