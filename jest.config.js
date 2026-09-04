@@ -22,6 +22,7 @@ module.exports = {
       },
       moduleNameMapper: {
         '^@/(.*)$': '<rootDir>/src/$1',
+        '\\.\\./\\.\\./\\.\\./modules/mediapipe-pose': '<rootDir>/tests/setup/mediapipe-pose-mock.js',
       },
       globals: {
         __DEV__: true,
