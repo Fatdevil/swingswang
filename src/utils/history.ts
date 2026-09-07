@@ -5,12 +5,20 @@
  * Local persistence for swing scores using expo-file-system legacy API.
  */
 
+import { Platform } from 'react-native';
 import { documentDirectory, writeAsStringAsync, readAsStringAsync, getInfoAsync } from 'expo-file-system/legacy';
 
 const HISTORY_FILE_PATH = `${documentDirectory}swing_history.json`;
+const HISTORY_WEB_KEY = 'swingswang_history_data';
 
 export async function saveHistoryLocally(scores: number[]) {
   try {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(HISTORY_WEB_KEY, JSON.stringify({ scores }));
+      }
+      return;
+    }
     await writeAsStringAsync(HISTORY_FILE_PATH, JSON.stringify({ scores }));
   } catch (e) {
     console.error('Failed to save history', e);
@@ -19,6 +27,16 @@ export async function saveHistoryLocally(scores: number[]) {
 
 export async function loadHistoryLocally(): Promise<number[]> {
   try {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const content = window.localStorage.getItem(HISTORY_WEB_KEY);
+        if (content) {
+          const parsed = JSON.parse(content);
+          return parsed.scores || [];
+        }
+      }
+      return [];
+    }
     const info = await getInfoAsync(HISTORY_FILE_PATH);
     if (info.exists) {
       const content = await readAsStringAsync(HISTORY_FILE_PATH);

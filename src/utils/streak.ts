@@ -5,9 +5,11 @@
  * Daily streak logic and persistence.
  */
 
+import { Platform } from 'react-native';
 import { documentDirectory, writeAsStringAsync, readAsStringAsync, getInfoAsync } from 'expo-file-system/legacy';
 
 const STREAK_FILE_PATH = `${documentDirectory}streak_data.json`;
+const STREAK_WEB_KEY = 'swingswang_streak_data';
 
 export interface StreakData {
   streakCount: number;
@@ -16,6 +18,12 @@ export interface StreakData {
 
 export async function saveStreakLocally(data: StreakData) {
   try {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(STREAK_WEB_KEY, JSON.stringify(data));
+      }
+      return;
+    }
     await writeAsStringAsync(STREAK_FILE_PATH, JSON.stringify(data));
   } catch (e) {
     console.error('Failed to save streak', e);
@@ -24,6 +32,22 @@ export async function saveStreakLocally(data: StreakData) {
 
 export async function loadStreakLocally(): Promise<StreakData | null> {
   try {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const content = window.localStorage.getItem(STREAK_WEB_KEY);
+        if (content) {
+          const parsed = JSON.parse(content);
+          if (parsed && typeof parsed === 'object') {
+            const streakCount = typeof parsed.streakCount === 'number' && Number.isFinite(parsed.streakCount) && parsed.streakCount >= 0
+              ? Math.floor(parsed.streakCount)
+              : 0;
+            const lastActiveDate = typeof parsed.lastActiveDate === 'string' ? parsed.lastActiveDate : '';
+            return { streakCount, lastActiveDate };
+          }
+        }
+      }
+      return null;
+    }
     const info = await getInfoAsync(STREAK_FILE_PATH);
     if (info.exists) {
       const content = await readAsStringAsync(STREAK_FILE_PATH);
