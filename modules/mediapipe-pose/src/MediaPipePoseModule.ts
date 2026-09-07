@@ -1,3 +1,7 @@
-import { requireNativeModule } from 'expo-modules-core';
+import { requireOptionalNativeModule, Platform } from 'expo-modules-core';
 
-export default requireNativeModule('MediaPipePose');
+const MediaPipePoseModule = Platform.OS === 'web'
+  ? null
+  : requireOptionalNativeModule('MediaPipePose');
+
+export default MediaPipePoseModule;

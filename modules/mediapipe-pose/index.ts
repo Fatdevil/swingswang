@@ -67,6 +67,9 @@ export async function detectImage(
   imageUri: string,
   modelVariant: MediaPipeModelVariant = 'lite'
 ): Promise<MediaPipeFrameResult> {
+  if (!MediaPipePoseModule?.detectImage) {
+    throw new Error('MediaPipePose is not available on this platform.');
+  }
   return MediaPipePoseModule.detectImage(imageUri, modelVariant);
 }
 
@@ -90,6 +93,9 @@ export async function processVideo(
     maxFrames?: number;
   } = { targetFps: 15 }
 ): Promise<MediaPipeVideoResult> {
+  if (!MediaPipePoseModule?.processVideo) {
+    throw new Error('MediaPipePose is not available on this platform.');
+  }
   return MediaPipePoseModule.processVideo(
     videoUri,
     modelVariant,
@@ -103,7 +109,9 @@ export async function processVideo(
  * Call when analysis is complete to free GPU/memory.
  */
 export async function release(): Promise<void> {
-  return MediaPipePoseModule.release();
+  if (MediaPipePoseModule?.release) {
+    return MediaPipePoseModule.release();
+  }
 }
 
 export default MediaPipePoseModule;
