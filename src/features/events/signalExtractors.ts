@@ -48,6 +48,7 @@ export function extractHandCenter(timeline: PoseTimeline): HandCenterPoint[] {
  * Frame-to-frame velocity of hand center (Euclidean distance per frame).
  * First frame velocity is 0. Returns NaN when hand center is unavailable
  * for either the current or previous frame.
+ * Uses realTimestamp when available for true real-world velocity (slow-motion invariant).
  */
 export function extractHandVelocity(timeline: PoseTimeline): number[] {
   const centers = extractHandCenter(timeline);
@@ -57,7 +58,13 @@ export function extractHandVelocity(timeline: PoseTimeline): number[] {
   for (let i = 1; i < centers.length; i++) {
     const prev = centers[i - 1];
     const curr = centers[i];
-    const dt = timeline.frames[i].timestamp - timeline.frames[i - 1].timestamp;
+    const tCurr = timeline.frames[i].realTimestamp ?? timeline.frames[i].timestamp;
+    const tPrev = timeline.frames[i - 1].realTimestamp ?? timeline.frames[i - 1].timestamp;
+    let dt = tCurr - tPrev;
+
+    if (dt <= 0) {
+      dt = timeline.frames[i].timestamp - timeline.frames[i - 1].timestamp;
+    }
 
     if (isNaN(prev.x) || isNaN(curr.x) || dt <= 0) {
       velocities.push(NaN);
@@ -189,7 +196,83 @@ export function extractWristHeight(timeline: PoseTimeline): number[] {
   });
 }
 
+// ─── Hand Lateral Offset ────────────────────────────────────────────
+
+/**
+ * Hand center lateral offset relative to hip center.
+ * Signed so positive = trail side (backswing side), negative = lead side (target / follow-through side).
+ *
+ * For Face-On (FO):
+ * For RIGHT-handed: Trail side is screen-right (higher X), lead side is screen-left (lower X).
+ *   offset = handCenter.x - hipCenter.x.
+ * For LEFT-handed: Trail side is screen-left (lower X), lead side is screen-right (higher X).
+ *   offset = hipCenter.x - handCenter.x.
+ *
+ * For Down-The-Line (DTL):
+ * Camera is looking down target line.
+ * Along X-axis, depth relative to pelvis center:
+ * Positive = away from body / behind hands, negative = in front.
+ */
+export function extractHandLateralOffset(
+  timeline: PoseTimeline,
+  handedness: GolferHandedness = 'RIGHT',
+  cameraView: CameraView = 'FO',
+): number[] {
+  const centers = extractHandCenter(timeline);
+  const sign = handedness === 'RIGHT' ? 1 : -1;
+
+  return timeline.frames.map((frame, i) => {
+    const hand = centers[i];
+    const leftHip = frame.landmarks.get(LandmarkID.leftHip);
+    const rightHip = frame.landmarks.get(LandmarkID.rightHip);
+
+    if (
+      isNaN(hand.x) ||
+      !isLandmarkVisible(leftHip) ||
+      !isLandmarkVisible(rightHip)
+    ) {
+      return NaN;
+    }
+
+    const hipX = (leftHip!.x + rightHip!.x) / 2;
+    return (hand.x - hipX) * sign;
+  });
+}
+
+// ─── Trail Heel Lift ────────────────────────────────────────────────
+
+/**
+ * Relative elevation of trail ankle versus lead ankle.
+ * In screen coordinates, Y increases downward (ground is larger Y).
+ * When trail foot lifts (e.g. at FINISH/P10 with toe-roll), trail ankle moves upward (smaller Y),
+ * so leadAnkle.y - trailAnkle.y becomes positive (> 0.04).
+ * When both feet are planted (ADDRESS/P1 through TOP/P4), trail ankle is near lead ankle level (≈ 0).
+ */
+export function extractTrailHeelLift(
+  timeline: PoseTimeline,
+  handedness: GolferHandedness = 'RIGHT',
+  cameraView: CameraView = 'FO',
+): number[] {
+  return timeline.frames.map((frame) => {
+    const leftAnkle = frame.landmarks.get(LandmarkID.leftAnkle);
+    const rightAnkle = frame.landmarks.get(LandmarkID.rightAnkle);
+
+    if (!isLandmarkVisible(leftAnkle) || !isLandmarkVisible(rightAnkle)) {
+      return NaN;
+    }
+
+    // Right-handed: trail foot is RIGHT, lead foot is LEFT
+    // Left-handed: trail foot is LEFT, lead foot is RIGHT
+    const trailAnkle = handedness === 'RIGHT' ? rightAnkle! : leftAnkle!;
+    const leadAnkle = handedness === 'RIGHT' ? leftAnkle! : rightAnkle!;
+
+    // leadAnkle.y - trailAnkle.y > 0 means trail ankle is higher on screen than lead ankle (lifted!)
+    return leadAnkle.y - trailAnkle.y;
+  });
+}
+
 // ─── Signal Smoothing ───────────────────────────────────────────────
+
 
 /**
  * Smooth a 1D numerical signal using a moving average window, preserving NaNs.

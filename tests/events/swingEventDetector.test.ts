@@ -504,4 +504,115 @@ describe('RuleBasedSwingEventDetectorV1', () => {
       expect(top?.signals.isDTL).toBe(true);
     });
   });
+
+  describe('untrimmed swing with high finish pose (P1-P10 discrimination)', () => {
+    it('correctly identifies TOP on trail side and FINISH on lead side even when finish is higher and held longer', () => {
+      // 100 frames at 15 FPS (~6.7s):
+      // Frames 0-35: Address setup and stillness
+      // Frames 36-55: Backswing moving to trail side (x increasing to 0.65, y decreasing to 0.20)
+      // Frame 56: TOP of backswing (wristY = 0.18, trail side x = 0.65, feet planted)
+      // Frames 57-63: Rapid downswing dropping to address height (peak velocity)
+      // Frame 64: IMPACT near address height (wristY = 0.50, x = 0.48)
+      // Frames 65-72: Follow-through moving to lead side (x decreasing to 0.32, y decreasing to 0.14)
+      // Frames 73-88: FINISH pose — wrists higher than top (y = 0.14), held still for 15 frames, trail heel lifted
+      // Frames 89-99: Relaxing
+      const totalFrames = 100;
+      const fps = 15;
+      const frames: PoseFrame[] = [];
+
+      for (let i = 0; i < totalFrames; i++) {
+        const timestamp = i / fps;
+        let wx = 0.50;
+        let wy = 0.50;
+        let trailAnkleY = 0.85;
+
+        if (i <= 35) {
+          // Address
+          wx = 0.50;
+          wy = 0.50;
+        } else if (i <= 55) {
+          // Backswing
+          const p = (i - 35) / 20;
+          wx = 0.50 + p * 0.15; // moves trail (0.65)
+          wy = 0.50 - p * 0.32; // rises (0.18)
+        } else if (i === 56) {
+          // TOP
+          wx = 0.65;
+          wy = 0.18;
+        } else if (i <= 63) {
+          // Downswing (very fast)
+          const p = (i - 56) / 7;
+          wx = 0.65 - p * 0.17; // moves towards lead
+          wy = 0.18 + p * 0.32; // drops fast to address height
+        } else if (i === 64) {
+          // IMPACT
+          wx = 0.48;
+          wy = 0.50;
+        } else if (i <= 72) {
+          // Follow-through
+          const p = (i - 64) / 8;
+          wx = 0.48 - p * 0.16; // 0.32 lead side
+          wy = 0.50 - p * 0.36; // 0.14 (higher than top!)
+          trailAnkleY = 0.85 - p * 0.10; // trail heel lifts (toe roll)
+        } else if (i <= 88) {
+          // FINISH pose held still
+          wx = 0.32;
+          wy = 0.14; // hands higher than at top!
+          trailAnkleY = 0.75; // trail heel held up
+        } else {
+          // Lowering club
+          wx = 0.45;
+          wy = 0.55;
+          trailAnkleY = 0.85;
+        }
+
+        frames.push(
+          createTestPoseFrame(timestamp, i, {
+            [LandmarkID.leftWrist]: { x: wx - 0.05, y: wy },
+            [LandmarkID.rightWrist]: { x: wx + 0.05, y: wy },
+            [LandmarkID.leftShoulder]: { x: 0.42, y: 0.25 },
+            [LandmarkID.rightShoulder]: { x: 0.58, y: 0.25 },
+            [LandmarkID.leftHip]: { x: 0.45, y: 0.55 },
+            [LandmarkID.rightHip]: { x: 0.55, y: 0.55 },
+            [LandmarkID.leftAnkle]: { x: 0.45, y: 0.85 },
+            [LandmarkID.rightAnkle]: { x: 0.55, y: trailAnkleY },
+          })
+        );
+      }
+
+      const timeline = new PoseTimeline(frames, totalFrames, 1000, fps);
+      const result = detector.detect(timeline, {
+        cameraView: 'FO',
+        handedness: 'RIGHT',
+        club: 'MID_IRON',
+      });
+
+      const top = getEventByType(result.events, 'TOP');
+      const impact = getEventByType(result.events, 'IMPACT_PROXY');
+      const finish = getEventByType(result.events, 'FINISH');
+      const address = getEventByType(result.events, 'ADDRESS');
+
+      expect(result.temporalOrderValid).toBe(true);
+
+      // TOP must be around frame 56 (at ~3.7s), NOT at frame 80 (in the finish)!
+      expect(top?.status).toBe('RELIABLE');
+      expect(top?.frameIndex).toBeGreaterThanOrEqual(50);
+      expect(top?.frameIndex).toBeLessThanOrEqual(60);
+
+      // IMPACT must be around frame 64
+      expect(impact?.status).toBe('RELIABLE');
+      expect(impact?.frameIndex).toBeGreaterThanOrEqual(60);
+      expect(impact?.frameIndex).toBeLessThanOrEqual(70);
+
+      // FINISH must be in the finish pose (frames 73-88)
+      expect(finish?.status).toBe('RELIABLE');
+      expect(finish?.frameIndex).toBeGreaterThanOrEqual(73);
+
+      // ADDRESS must immediately precede the swing (around frame 30-36)
+      expect(address?.status).toBe('RELIABLE');
+      expect(address?.frameIndex).toBeGreaterThanOrEqual(15);
+      expect(address?.frameIndex).toBeLessThan(40);
+    });
+  });
 });
+

@@ -13,6 +13,8 @@ import {
   extractShoulderSpan,
   extractHipLateralPosition,
   extractWristHeight,
+  extractHandLateralOffset,
+  extractTrailHeelLift,
 } from '@/features/events/signalExtractors';
 import { LandmarkID } from '@/types/landmarks';
 import { createTestPoseFrame, createTestTimeline } from '../helpers/poseFixtures';
@@ -411,3 +413,73 @@ describe('extractWristHeight', () => {
     expect(extractWristHeight(timeline)).toHaveLength(0);
   });
 });
+
+// ─── extractHandLateralOffset ───────────────────────────────────────
+
+describe('extractHandLateralOffset', () => {
+  it('returns positive offset for trail side and negative for lead side (RIGHT-handed, FO)', () => {
+    // Hip center at x = 0.50 (leftHip: 0.45, rightHip: 0.55)
+    // Frame 0: hands at x = 0.65 (trail side / backswing for RH)
+    // Frame 1: hands at x = 0.35 (lead side / follow-through for RH)
+    const frames = createTestTimeline(2, {
+      landmarkOverridesPerFrame: {
+        0: {
+          [LandmarkID.leftHip]: { x: 0.45, y: 0.55 },
+          [LandmarkID.rightHip]: { x: 0.55, y: 0.55 },
+          [LandmarkID.leftWrist]: { x: 0.65, y: 0.30 },
+          [LandmarkID.rightWrist]: { x: 0.65, y: 0.30 },
+        },
+        1: {
+          [LandmarkID.leftHip]: { x: 0.45, y: 0.55 },
+          [LandmarkID.rightHip]: { x: 0.55, y: 0.55 },
+          [LandmarkID.leftWrist]: { x: 0.35, y: 0.30 },
+          [LandmarkID.rightWrist]: { x: 0.35, y: 0.30 },
+        },
+      },
+    });
+    const timeline = toTimeline(frames);
+    const offsets = extractHandLateralOffset(timeline, 'RIGHT', 'FO');
+
+    expect(offsets[0]).toBeGreaterThan(0.10); // trail side is positive
+    expect(offsets[1]).toBeLessThan(-0.10);  // lead side is negative
+  });
+
+  it('handles empty timeline', () => {
+    const timeline = toTimeline([]);
+    expect(extractHandLateralOffset(timeline)).toHaveLength(0);
+  });
+});
+
+// ─── extractTrailHeelLift ───────────────────────────────────────────
+
+describe('extractTrailHeelLift', () => {
+  it('detects trail heel elevation when trail ankle rises relative to lead ankle', () => {
+    // For RIGHT-handed: trail ankle is rightAnkle, lead ankle is leftAnkle.
+    // Screen Y increases downwards.
+    // Frame 0: both feet planted at y = 0.85 (lift ≈ 0)
+    // Frame 1: right ankle lifts to y = 0.75 (toe-roll finish), left ankle at y = 0.85
+    const frames = createTestTimeline(2, {
+      landmarkOverridesPerFrame: {
+        0: {
+          [LandmarkID.leftAnkle]: { x: 0.45, y: 0.85 },
+          [LandmarkID.rightAnkle]: { x: 0.55, y: 0.85 },
+        },
+        1: {
+          [LandmarkID.leftAnkle]: { x: 0.45, y: 0.85 },
+          [LandmarkID.rightAnkle]: { x: 0.55, y: 0.75 },
+        },
+      },
+    });
+    const timeline = toTimeline(frames);
+    const lifts = extractTrailHeelLift(timeline, 'RIGHT', 'FO');
+
+    expect(lifts[0]).toBeCloseTo(0);
+    expect(lifts[1]).toBeCloseTo(0.10); // positive lift
+  });
+
+  it('handles empty timeline', () => {
+    const timeline = toTimeline([]);
+    expect(extractTrailHeelLift(timeline)).toHaveLength(0);
+  });
+});
+

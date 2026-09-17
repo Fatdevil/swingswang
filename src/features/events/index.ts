@@ -21,6 +21,8 @@ export {
   extractShoulderSpan,
   extractHipLateralPosition,
   extractWristHeight,
+  extractHandLateralOffset,
+  extractTrailHeelLift,
   smoothSignal,
 } from './signalExtractors';
 

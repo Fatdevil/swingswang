@@ -23,6 +23,8 @@ import {
   extractHandVelocity,
   extractHandDirection,
   extractWristHeight,
+  extractHandLateralOffset,
+  extractTrailHeelLift,
   smoothSignal,
 } from './signalExtractors';
 
@@ -132,6 +134,16 @@ export function checkAddressPosture(
   return { isValid: true, isRelaxed: true };
 }
 
+export interface AddressCandidate {
+  readonly startIdx: number;
+  readonly endIdx: number;
+  readonly midIdx: number;
+  readonly clarity: number;
+  readonly avgVelocity: number;
+  readonly usedRelaxed: boolean;
+  readonly consecutiveFrames: number;
+}
+
 // ─── Configuration ──────────────────────────────────────────────────
 
 /** PROVISIONAL thresholds for swing event detection. */
@@ -235,45 +247,158 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
       : rawVelocities;
     const directions = extractHandDirection(timeline, handedness, cameraView);
     const wristHeights = extractWristHeight(timeline);
-    const handCenters = extractHandCenter(timeline);
+    const lateralOffsets = extractHandLateralOffset(timeline, handedness, cameraView);
+    const heelLifts = extractTrailHeelLift(timeline, handedness, cameraView);
 
     const frameCount = timeline.frames.length;
 
-    // Detect each event
-    const addressResult = this.detectAddress(velocities, wristHeights, timeline, frameCount, cameraView);
-    if (addressResult.usedRelaxed) {
-      warnings.push('Relaxed address posture criteria used: lower body landmarks not fully visible');
-    }
-    if (addressResult.event.status !== 'RELIABLE') {
-      warnings.push('No valid golf address posture detected');
+    // Collect all valid address setup candidates
+    const addressCandidates = this.collectAddressCandidates(velocities, timeline, frameCount, cameraView);
+
+    // Locate the candidate downswing peak (kinetic anchor)
+    let peakVel = 0;
+    let peakIdx = -1;
+
+    for (let i = 1; i < frameCount - 1; i++) {
+      const v = velocities[i];
+      if (isNaN(v)) continue;
+
+      const prevV = isNaN(velocities[i - 1]) ? 0 : velocities[i - 1];
+      const nextV = isNaN(velocities[i + 1]) ? 0 : velocities[i + 1];
+
+      // Filter out isolated 1-frame spikes: require at least one neighbor with some movement
+      if (v > peakVel && (prevV > 0.08 || nextV > 0.08 || v < 0.6)) {
+        peakVel = v;
+        peakIdx = i;
+      }
     }
 
-    const takeawayResult = this.detectTakeaway(
+    // Single frame fallback
+    if (frameCount === 1) {
+      const posture = checkAddressPosture(timeline.frames[0], cameraView);
+      if (posture.isValid) {
+        const v = isNaN(velocities[0]) ? 0 : velocities[0];
+        const clarity = Math.max(0.1, 1 - (v / this.config.stillnessVelocityThreshold));
+        const addr = reliableEvent('ADDRESS', 0, timeline.frames[0].timestamp * 1000, clarity, {
+          avgVelocity: v,
+          stillFrames: 1,
+          postureValidated: true,
+          relaxedPosture: posture.isRelaxed,
+        });
+        const events: SwingEvent[] = [
+          addr,
+          unreliableEvent('TAKEAWAY'),
+          unreliableEvent('MID_BACKSWING'),
+          unreliableEvent('TOP'),
+          unreliableEvent('MID_DOWNSWING'),
+          unreliableEvent('IMPACT_PROXY'),
+          unreliableEvent('MID_FOLLOW_THROUGH'),
+          unreliableEvent('FINISH'),
+        ];
+        return {
+          events,
+          detectedCount: 1,
+          reliableCount: 1,
+          temporalOrderValid: true,
+          warnings,
+        };
+      }
+    }
+
+    // If peak velocity is below movement threshold, handle as stationary / sub-threshold timeline
+    if (peakIdx === -1 || peakVel < Math.max(0.20, this.config.movementVelocityThreshold)) {
+      return this.detectStationaryTimeline(
+        velocities,
+        timeline,
+        frameCount,
+        addressCandidates,
+        warnings,
+        cameraView,
+      );
+    }
+
+    // ─── ACTIVE SWING DETECTION (Bidirectional Peak Velocity Anchor) ───
+
+    // Step 1: Detect TOP (P4) by searching BACKWARD from the downswing peak
+    const topResult = this.detectTopBackward(
+      wristHeights,
+      velocities,
+      lateralOffsets,
+      heelLifts,
+      timeline,
+      peakIdx,
+      peakVel,
+      cameraView,
+      addressCandidates,
+    );
+
+    // Step 2: Detect TAKEAWAY (P2) by searching BACKWARD from TOP
+    const takeawayResult = this.detectTakeawayBackward(
       velocities,
       directions,
+      wristHeights,
       timeline,
-      addressResult.event.frameIndex,
-      frameCount,
+      topResult.frameIndex,
+      addressCandidates,
       cameraView,
     );
-    const addressWristHeight =
-      addressResult.event.frameIndex !== null && !isNaN(wristHeights[addressResult.event.frameIndex])
-        ? wristHeights[addressResult.event.frameIndex]
-        : -0.2;
-    const topResult = this.detectTop(
-      wristHeights,
-      directions,
+
+    // Step 3: Detect ADDRESS (P1) immediately preceding TAKEAWAY
+    const addressResult = this.detectAddressPrecedingTakeaway(
+      addressCandidates,
       timeline,
       takeawayResult.frameIndex,
+      warnings,
+    );
+
+    // Step 4: Detect MID_BACKSWING (P3) between Takeaway and Top
+    const midBackswingResult = this.detectMidBackswing(
+      wristHeights,
+      timeline,
+      takeawayResult.frameIndex,
+      topResult.frameIndex,
+    );
+
+    // Step 5: Detect IMPACT_PROXY (P7) forward from Top around downswing peak
+    const impactResult = this.detectImpactProxyAroundPeak(
+      wristHeights,
+      velocities,
+      timeline,
+      topResult.frameIndex,
+      peakIdx,
+      peakVel,
+      frameCount,
+      addressResult.event,
+    );
+
+    // Step 6: Detect MID_DOWNSWING (P5) between Top and Impact
+    const midDownswingResult = this.detectMidDownswing(
+      velocities,
+      timeline,
+      topResult.frameIndex,
+      impactResult.frameIndex,
+    );
+
+    // Step 7: Detect MID_FOLLOW_THROUGH (P8) after Impact
+    const midFollowThroughResult = this.detectMidFollowThrough(
+      velocities,
+      timeline,
+      impactResult.frameIndex,
+      frameCount,
+    );
+
+    // Step 8: Detect FINISH (P10) after Impact / Follow-through
+    const finishResult = this.detectFinishForward(
+      velocities,
+      lateralOffsets,
+      heelLifts,
+      wristHeights,
+      timeline,
+      impactResult.frameIndex,
       frameCount,
       cameraView,
-      addressWristHeight,
+      addressResult.event,
     );
-    const midBackswingResult = this.detectMidBackswing(wristHeights, timeline, takeawayResult.frameIndex, topResult.frameIndex);
-    const impactResult = this.detectImpactProxy(wristHeights, velocities, timeline, topResult.frameIndex, frameCount, addressResult.event);
-    const midDownswingResult = this.detectMidDownswing(velocities, timeline, topResult.frameIndex, impactResult.frameIndex);
-    const midFollowThroughResult = this.detectMidFollowThrough(velocities, timeline, impactResult.frameIndex, frameCount);
-    const finishResult = this.detectFinish(velocities, timeline, impactResult.frameIndex, frameCount);
 
     // Build the events array in canonical order
     const events: SwingEvent[] = [
@@ -287,7 +412,20 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
       finishResult,
     ];
 
-    // Validate temporal order
+    // Enforce strict temporal ordering (Truth Gate)
+    let lastIndex = -1;
+    for (let i = 0; i < events.length; i++) {
+      const e = events[i];
+      if (e.status === 'RELIABLE' && e.frameIndex !== null) {
+        if (e.frameIndex < lastIndex) {
+          // Out of order event: mark as NOT_RELIABLE to prevent corrupting analytics
+          events[i] = unreliableEvent(e.event);
+        } else {
+          lastIndex = e.frameIndex;
+        }
+      }
+    }
+
     const temporalOrderValid = validateTemporalOrder(events);
     if (!temporalOrderValid) {
       warnings.push('Detected events are not in valid temporal order');
@@ -305,34 +443,20 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
     };
   }
 
-  // ─── ADDRESS Detection ──────────────────────────────────────────
+  // ─── Candidate & Helper Methods ─────────────────────────────────
 
-  /**
-   * ADDRESS: Run of consecutive frames where hand velocity is below stillness threshold
-   * AND body posture matches golf setup. When multiple stillness runs are found (e.g. in long
-   * untrimmed video), selects the candidate that immediately precedes the actual swing.
-   */
-  private detectAddress(
+  private collectAddressCandidates(
     velocities: number[],
-    wristHeights: number[],
     timeline: PoseTimeline,
     frameCount: number,
     cameraView: CameraView = 'FO',
-  ): { event: SwingEvent; usedRelaxed: boolean } {
-    const { stillnessVelocityThreshold, stillnessMinFrames, movementVelocityThreshold } = this.config;
+  ): AddressCandidate[] {
+    const { stillnessVelocityThreshold, stillnessMinFrames } = this.config;
     let consecutiveStill = 0;
     let runStart = 0;
     let runUsedRelaxed = false;
 
-    const candidates: Array<{
-      startIdx: number;
-      endIdx: number;
-      midIdx: number;
-      clarity: number;
-      avgVelocity: number;
-      usedRelaxed: boolean;
-      consecutiveFrames: number;
-    }> = [];
+    const candidates: AddressCandidate[] = [];
 
     for (let i = 0; i < frameCount; i++) {
       const v = velocities[i];
@@ -383,178 +507,380 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
       });
     }
 
-    if (candidates.length > 0) {
-      let bestCandidate = candidates[0];
+    return candidates;
+  }
 
-      // If multiple candidates exist, find the one that is followed by the actual swing!
-      if (candidates.length > 1) {
-        let bestSwingScore = -1;
-        const fps = timeline.analyzedFPS > 0 ? timeline.analyzedFPS : 30;
-        const windowLookahead = Math.round(fps * 2.5); // look up to 2.5s ahead
+  private detectStationaryTimeline(
+    velocities: number[],
+    timeline: PoseTimeline,
+    frameCount: number,
+    addressCandidates: AddressCandidate[],
+    warnings: string[],
+    cameraView: CameraView,
+  ): SwingEventResult {
+    let addressEvent: SwingEvent;
+    let usedRelaxed = false;
 
-        for (const cand of candidates) {
-          let swingScore = 0;
-          const searchLimit = Math.min(frameCount, cand.endIdx + windowLookahead);
-
-          for (let j = cand.endIdx + 1; j < searchLimit; j++) {
-            const v = velocities[j];
-            const h = wristHeights[j];
-            if (!isNaN(v) && v > movementVelocityThreshold) {
-              swingScore += v;
-            }
-            if (!isNaN(h) && h > 0) {
-              swingScore += 2;
-            }
-          }
-
-          if (swingScore > bestSwingScore) {
-            bestSwingScore = swingScore;
-            bestCandidate = cand;
-          }
-        }
-      }
-
-      const midFrame = timeline.frames[bestCandidate.midIdx];
-      return {
-        event: reliableEvent('ADDRESS', bestCandidate.midIdx, midFrame.timestamp * 1000, bestCandidate.clarity, {
-          avgVelocity: bestCandidate.avgVelocity,
-          stillFrames: bestCandidate.consecutiveFrames,
-          postureValidated: true,
-          relaxedPosture: bestCandidate.usedRelaxed,
-        }),
-        usedRelaxed: bestCandidate.usedRelaxed,
-      };
+    if (addressCandidates.length > 0) {
+      const best = addressCandidates[0];
+      usedRelaxed = best.usedRelaxed;
+      const midFrame = timeline.frames[best.midIdx];
+      addressEvent = reliableEvent('ADDRESS', best.midIdx, midFrame.timestamp * 1000, best.clarity, {
+        avgVelocity: best.avgVelocity,
+        stillFrames: best.consecutiveFrames,
+        postureValidated: true,
+        relaxedPosture: best.usedRelaxed,
+      });
+    } else {
+      addressEvent = unreliableEvent('ADDRESS');
+      warnings.push('No valid golf address posture detected');
     }
 
-    // Single frame fallback
-    if (frameCount === 1) {
-      const v = velocities[0];
-      const posture = checkAddressPosture(timeline.frames[0], cameraView);
-      if (!isNaN(v) && v <= stillnessVelocityThreshold && posture.isValid) {
-        const clarity = 1 - (v / stillnessVelocityThreshold);
-        return {
-          event: reliableEvent('ADDRESS', 0, timeline.frames[0].timestamp * 1000, clarity, {
-            avgVelocity: v,
-            stillFrames: 1,
-            postureValidated: true,
-            relaxedPosture: posture.isRelaxed,
-          }),
-          usedRelaxed: posture.isRelaxed,
-        };
-      }
+    if (usedRelaxed) {
+      warnings.push('Relaxed address posture criteria used: lower body landmarks not fully visible');
     }
 
+    let finishEvent = unreliableEvent('FINISH');
+    if (frameCount >= 3) {
+      finishEvent = this.detectFinish(velocities, timeline, null, frameCount);
+    }
+
+    const events: SwingEvent[] = [
+      addressEvent,
+      unreliableEvent('TAKEAWAY'),
+      unreliableEvent('MID_BACKSWING'),
+      unreliableEvent('TOP'),
+      unreliableEvent('MID_DOWNSWING'),
+      unreliableEvent('IMPACT_PROXY'),
+      unreliableEvent('MID_FOLLOW_THROUGH'),
+      finishEvent,
+    ];
+
+    const detectedCount = events.filter(e => e.status === 'RELIABLE').length;
     return {
-      event: unreliableEvent('ADDRESS'),
-      usedRelaxed: false,
+      events,
+      detectedCount,
+      reliableCount: detectedCount,
+      temporalOrderValid: validateTemporalOrder(events),
+      warnings,
     };
   }
 
-  // ─── TAKEAWAY Detection ─────────────────────────────────────────
-
-  /**
-   * TAKEAWAY: First frame after ADDRESS where hand velocity exceeds the
-   * movement threshold AND hand direction is away from target / into backswing.
-   */
-  private detectTakeaway(
+  private detectTopBackward(
+    wristHeights: number[],
     velocities: number[],
-    directions: number[],
+    lateralOffsets: number[],
+    heelLifts: number[],
     timeline: PoseTimeline,
-    addressFrame: number | null,
-    frameCount: number,
+    peakIdx: number,
+    peakVel: number,
     cameraView: CameraView = 'FO',
+    addressCandidates: AddressCandidate[],
   ): SwingEvent {
-    if (addressFrame === null) {
-      return unreliableEvent('TAKEAWAY');
+    const searchStart = Math.max(0, peakIdx - 150);
+    let bestTopIdx = -1;
+    let bestTopScore = -Infinity;
+
+    const refAddressHeight = addressCandidates.length > 0 && !isNaN(wristHeights[addressCandidates[0].midIdx])
+      ? wristHeights[addressCandidates[0].midIdx]
+      : -0.2;
+
+    for (let j = peakIdx - 1; j >= searchStart; j--) {
+      const h = wristHeights[j];
+      const v = velocities[j];
+      const offset = lateralOffsets[j];
+      const heel = heelLifts[j];
+
+      if (isNaN(h)) continue;
+
+      // Disqualify frames on the lead side (FO view)
+      if (!isNaN(offset) && cameraView === 'FO' && offset < -0.06) {
+        continue;
+      }
+
+      // Disqualify frames with trail heel lifted into finish toe-roll
+      if (!isNaN(heel) && heel > 0.08) {
+        continue;
+      }
+
+      const heightScore = h;
+      const trailBonus = (!isNaN(offset) && offset > 0) ? 0.25 : 0;
+      const velRatio = !isNaN(v) && peakVel > 0 ? v / peakVel : 0.5;
+      const velPenalty = velRatio * 0.4;
+      const score = heightScore + trailBonus - velPenalty;
+
+      if (score > bestTopScore) {
+        bestTopScore = score;
+        bestTopIdx = j;
+      }
     }
 
-    const { movementVelocityThreshold } = this.config;
-    const startSearch = addressFrame + 1;
+    if (bestTopIdx === -1) {
+      let maxH = -Infinity;
+      for (let j = peakIdx - 1; j >= searchStart; j--) {
+        const h = wristHeights[j];
+        if (!isNaN(h) && h > maxH) {
+          maxH = h;
+          bestTopIdx = j;
+        }
+      }
+    }
 
-    for (let i = startSearch; i < frameCount; i++) {
-      const v = velocities[i];
-      const d = directions[i];
-
-      if (!isNaN(v) && !isNaN(d) && v > movementVelocityThreshold && d < 0) {
-        const frame = timeline.frames[i];
-        const confidence = Math.min(1, v / (movementVelocityThreshold * 3));
-        return reliableEvent('TAKEAWAY', i, frame.timestamp * 1000, confidence, {
-          velocity: v,
-          direction: d,
-          isAwayFromTarget: true,
+    if (bestTopIdx >= 0) {
+      const topHeight = wristHeights[bestTopIdx];
+      const minHeightReq = refAddressHeight + 0.08;
+      if (topHeight > 0 || topHeight > minHeightReq) {
+        const frame = timeline.frames[bestTopIdx];
+        const confidence = Math.min(1, Math.max(0.4, (topHeight - refAddressHeight) * 3));
+        return reliableEvent('TOP', bestTopIdx, frame.timestamp * 1000, confidence, {
+          wristHeight: topHeight,
+          frameIndex: bestTopIdx,
           isDTL: cameraView === 'DTL',
         });
       }
     }
 
-    return unreliableEvent('TAKEAWAY');
+    return unreliableEvent('TOP');
   }
 
-  // ─── TOP Detection ──────────────────────────────────────────────
-
-  /**
-   * TOP: Frame where wrist height reaches its maximum after takeaway.
-   * This approximates the top of the backswing where direction reverses.
-   */
-  private detectTop(
-    wristHeights: number[],
+  private detectTakeawayBackward(
+    velocities: number[],
     directions: number[],
+    wristHeights: number[],
     timeline: PoseTimeline,
-    takeawayFrame: number | null,
-    frameCount: number,
+    topFrame: number | null,
+    addressCandidates: AddressCandidate[],
     cameraView: CameraView = 'FO',
-    addressWristHeight: number = -0.2,
   ): SwingEvent {
-    if (takeawayFrame === null) {
-      return unreliableEvent('TOP');
+    if (topFrame === null || topFrame <= 0) {
+      return unreliableEvent('TAKEAWAY');
     }
 
-    const startSearch = takeawayFrame + 1;
-    const { directionChangeMinDelta } = this.config;
+    const refAddressHeight = addressCandidates.length > 0 && !isNaN(wristHeights[addressCandidates[0].midIdx])
+      ? wristHeights[addressCandidates[0].midIdx]
+      : -0.2;
 
-    // Find the frame with maximum wrist height between takeaway and end
-    let maxHeight = -Infinity;
-    let maxIdx = -1;
-    let downswingFrames = 0;
+    const searchStart = Math.max(0, topFrame - 120);
+    let takeawayIdx = -1;
 
-    for (let i = startSearch; i < frameCount; i++) {
-      const h = wristHeights[i];
-      const d = directions[i];
+    for (let k = topFrame - 1; k >= searchStart; k--) {
+      const v = velocities[k];
+      const h = wristHeights[k];
+      const d = directions[k];
 
-      if (!isNaN(h) && h > maxHeight) {
-        maxHeight = h;
-        maxIdx = i;
-        downswingFrames = 0; // Reset if we found a new high
+      const isNearAddressHeight = Math.abs(h - refAddressHeight) < 0.15 || h <= refAddressHeight + 0.06;
+      const isSlow = !isNaN(v) && v <= Math.max(0.12, this.config.movementVelocityThreshold * 0.8);
+
+      if (isNearAddressHeight && isSlow) {
+        takeawayIdx = Math.min(topFrame - 1, k + 1);
+        break;
       }
 
-      // If we have a peak and hand is moving positively (downswing)
-      if (!isNaN(d) && maxIdx !== -1) {
-        if (d > directionChangeMinDelta) {
-          downswingFrames++;
-          if (downswingFrames > 3) {
-            // Definitively in downswing, stop searching to avoid matching a high finish
-            break;
-          }
-        } else if (d <= 0) {
-          // Hand stopped moving towards target or moved away again
-          downswingFrames = 0;
+      if (!isNaN(d) && d < 0 && !isNaN(v) && v > 0.15) {
+        takeawayIdx = k;
+      }
+    }
+
+    if (takeawayIdx === -1) {
+      takeawayIdx = Math.max(0, Math.floor(topFrame / 2));
+    }
+
+    const frame = timeline.frames[takeawayIdx];
+    const v = isNaN(velocities[takeawayIdx]) ? 0.3 : velocities[takeawayIdx];
+    const confidence = Math.min(1, Math.max(0.3, v / (this.config.movementVelocityThreshold * 2)));
+
+    return reliableEvent('TAKEAWAY', takeawayIdx, frame.timestamp * 1000, confidence, {
+      velocity: v,
+      direction: isNaN(directions[takeawayIdx]) ? -1 : directions[takeawayIdx],
+      isAwayFromTarget: true,
+      isDTL: cameraView === 'DTL',
+    });
+  }
+
+  private detectAddressPrecedingTakeaway(
+    addressCandidates: AddressCandidate[],
+    timeline: PoseTimeline,
+    takeawayIdx: number | null,
+    warnings: string[],
+  ): { event: SwingEvent; usedRelaxed: boolean } {
+    if (addressCandidates.length === 0) {
+      warnings.push('No valid golf address posture detected');
+      return { event: unreliableEvent('ADDRESS'), usedRelaxed: false };
+    }
+
+    let bestCand = addressCandidates[0];
+    let minGap = Infinity;
+
+    for (const cand of addressCandidates) {
+      if (takeawayIdx !== null && cand.endIdx <= takeawayIdx) {
+        const gap = takeawayIdx - cand.endIdx;
+        if (gap < minGap) {
+          minGap = gap;
+          bestCand = cand;
         }
       }
     }
 
-    // Top is valid if hands are above shoulders (maxHeight > 0) OR significantly above address position
-    const minHeightRequired = addressWristHeight + 0.10;
-    if (maxIdx >= 0 && (maxHeight > 0 || maxHeight > minHeightRequired)) {
-      const frame = timeline.frames[maxIdx];
-      const confidence = Math.min(1, Math.max(0.4, (maxHeight - addressWristHeight) * 3));
-      return reliableEvent('TOP', maxIdx, frame.timestamp * 1000, confidence, {
-        wristHeight: maxHeight,
-        frameIndex: maxIdx,
-        isDTL: cameraView === 'DTL',
+    if (bestCand.usedRelaxed) {
+      warnings.push('Relaxed address posture criteria used: lower body landmarks not fully visible');
+    }
+
+    const midFrame = timeline.frames[bestCand.midIdx];
+    return {
+      event: reliableEvent('ADDRESS', bestCand.midIdx, midFrame.timestamp * 1000, bestCand.clarity, {
+        avgVelocity: bestCand.avgVelocity,
+        stillFrames: bestCand.consecutiveFrames,
+        postureValidated: true,
+        relaxedPosture: bestCand.usedRelaxed,
+      }),
+      usedRelaxed: bestCand.usedRelaxed,
+    };
+  }
+
+  private detectImpactProxyAroundPeak(
+    wristHeights: number[],
+    velocities: number[],
+    timeline: PoseTimeline,
+    topFrame: number | null,
+    peakIdx: number,
+    peakVel: number,
+    frameCount: number,
+    addressEvent: SwingEvent,
+  ): SwingEvent {
+    const addressWristHeight = addressEvent.frameIndex !== null && !isNaN(wristHeights[addressEvent.frameIndex])
+      ? wristHeights[addressEvent.frameIndex]
+      : -0.2;
+
+    const startSearch = topFrame !== null ? topFrame + 1 : Math.max(0, peakIdx - 5);
+    const endSearch = Math.min(frameCount - 1, peakIdx + 15);
+
+    let bestIdx = -1;
+    let bestScore = -Infinity;
+
+    for (let i = startSearch; i <= endSearch; i++) {
+      const h = wristHeights[i];
+      const v = velocities[i];
+      if (isNaN(h) || isNaN(v)) continue;
+
+      const heightMatch = Math.abs(h - addressWristHeight);
+      const maxTol = 0.25;
+      if (heightMatch > maxTol) continue;
+
+      const heightScore = 1 - (heightMatch / maxTol);
+      const velocityScore = peakVel > 0 ? v / peakVel : 0;
+      const score = heightScore * 0.4 + velocityScore * 0.6;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+
+    if (bestIdx === -1 && peakIdx > (topFrame ?? 0)) {
+      bestIdx = peakIdx;
+      bestScore = 0.7;
+    }
+
+    if (bestIdx >= 0) {
+      const frame = timeline.frames[bestIdx];
+      const confidence = Math.min(1, Math.max(0.4, bestScore));
+      return reliableEvent('IMPACT_PROXY', bestIdx, frame.timestamp * 1000, confidence, {
+        wristHeight: wristHeights[bestIdx],
+        addressWristHeight,
+        velocity: velocities[bestIdx],
+        heightMatch: Math.abs(wristHeights[bestIdx] - addressWristHeight),
       });
     }
 
-    return unreliableEvent('TOP');
+    return unreliableEvent('IMPACT_PROXY');
+  }
+
+  private detectFinishForward(
+    velocities: number[],
+    lateralOffsets: number[],
+    heelLifts: number[],
+    wristHeights: number[],
+    timeline: PoseTimeline,
+    impactFrame: number | null,
+    frameCount: number,
+    cameraView: CameraView = 'FO',
+    addressEvent: SwingEvent,
+  ): SwingEvent {
+    const { stillnessVelocityThreshold, stillnessMinFrames } = this.config;
+    const startSearch = impactFrame !== null ? impactFrame + 1 : Math.floor(frameCount / 2);
+    const addressWristHeight = addressEvent.frameIndex !== null && !isNaN(wristHeights[addressEvent.frameIndex])
+      ? wristHeights[addressEvent.frameIndex]
+      : -0.2;
+
+    let consecutiveStill = 0;
+    let runStart = 0;
+    let bestFinishIdx = -1;
+    let finishClarity = 0.8;
+    let finishStillFrames = 0;
+    let finishAvgVel = 0;
+
+    for (let i = startSearch; i < frameCount; i++) {
+      const v = velocities[i];
+      const offset = lateralOffsets[i];
+      const heel = heelLifts[i];
+      const h = wristHeights[i];
+
+      if (!isNaN(v) && v <= stillnessVelocityThreshold) {
+        if (consecutiveStill === 0) runStart = i;
+        consecutiveStill++;
+
+        if (consecutiveStill >= stillnessMinFrames) {
+          const midIdx = Math.floor((runStart + i) / 2);
+          const avgVel = this.averageInRange(velocities, runStart, i);
+          const clarity = 1 - (avgVel / stillnessVelocityThreshold);
+
+          // In FO view: verify finish posture (hands on lead side, heel lifted, or wrists above address)
+          const isLeadSide = isNaN(offset) || cameraView !== 'FO' || offset < 0.08;
+          const isHeelLifted = !isNaN(heel) && heel > 0.03;
+          const isWristsHigh = !isNaN(h) && h > addressWristHeight + 0.05;
+
+          if (isLeadSide || isHeelLifted || isWristsHigh) {
+            bestFinishIdx = midIdx;
+            finishClarity = clarity;
+            finishStillFrames = consecutiveStill;
+            finishAvgVel = avgVel;
+            break;
+          }
+        }
+      } else {
+        consecutiveStill = 0;
+      }
+    }
+
+    if (bestFinishIdx === -1) {
+      consecutiveStill = 0;
+      for (let i = startSearch; i < frameCount; i++) {
+        const v = velocities[i];
+        if (!isNaN(v) && v <= stillnessVelocityThreshold) {
+          if (consecutiveStill === 0) runStart = i;
+          consecutiveStill++;
+          if (consecutiveStill >= stillnessMinFrames) {
+            bestFinishIdx = Math.floor((runStart + i) / 2);
+            finishAvgVel = this.averageInRange(velocities, runStart, i);
+            finishClarity = 1 - (finishAvgVel / stillnessVelocityThreshold);
+            finishStillFrames = consecutiveStill;
+            break;
+          }
+        } else {
+          consecutiveStill = 0;
+        }
+      }
+    }
+
+    if (bestFinishIdx >= 0) {
+      const frame = timeline.frames[bestFinishIdx];
+      return reliableEvent('FINISH', bestFinishIdx, frame.timestamp * 1000, finishClarity, {
+        avgVelocity: finishAvgVel,
+        stillFrames: finishStillFrames,
+      });
+    }
+
+    return unreliableEvent('FINISH');
   }
 
   // ─── MID_BACKSWING Detection ────────────────────────────────────
