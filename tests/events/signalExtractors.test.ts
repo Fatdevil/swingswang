@@ -237,6 +237,35 @@ describe('extractHandDirection', () => {
     const timeline = toTimeline([]);
     expect(extractHandDirection(timeline, 'RIGHT')).toHaveLength(0);
   });
+
+  it('correctly identifies movement for Down-the-Line (DTL) view', () => {
+    // DTL: upward movement (decreasing Y) = backswing (negative)
+    // downward movement (increasing Y) = downswing (positive)
+    const frames = createTestTimeline(3, {
+      landmarkOverridesPerFrame: {
+        0: {
+          [LandmarkID.leftWrist]: { x: 0.5, y: 0.5 },
+          [LandmarkID.rightWrist]: { x: 0.5, y: 0.5 },
+        },
+        1: {
+          // Moving up into backswing (y decreases: 0.5 -> 0.3)
+          [LandmarkID.leftWrist]: { x: 0.5, y: 0.3 },
+          [LandmarkID.rightWrist]: { x: 0.5, y: 0.3 },
+        },
+        2: {
+          // Moving down into downswing (y increases: 0.3 -> 0.6)
+          [LandmarkID.leftWrist]: { x: 0.5, y: 0.6 },
+          [LandmarkID.rightWrist]: { x: 0.5, y: 0.6 },
+        },
+      },
+    });
+    const timeline = toTimeline(frames);
+    const directions = extractHandDirection(timeline, 'RIGHT', 'DTL');
+
+    expect(directions[0]).toBe(0);
+    expect(directions[1]).toBeLessThan(0); // upward / backswing = negative
+    expect(directions[2]).toBeGreaterThan(0); // downward / downswing = positive
+  });
 });
 
 // ─── extractShoulderSpan ────────────────────────────────────────────

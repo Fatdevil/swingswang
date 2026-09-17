@@ -12,6 +12,7 @@ import { SwingConfig } from '@/types/swing';
 import {
   RuleBasedSwingEventDetectorV1,
   DEFAULT_EVENT_DETECTION_CONFIG,
+  checkAddressPosture,
 } from '@/features/events/RuleBasedSwingEventDetectorV1';
 import { SWING_EVENT_ORDER, SwingEventType, SwingEvent } from '@/features/events/types';
 import { createTestPoseFrame, createTestTimeline, createStationarySequence } from '../helpers/poseFixtures';
@@ -333,6 +334,174 @@ describe('RuleBasedSwingEventDetectorV1', () => {
 
       // With very strict thresholds, may detect fewer events
       expect(result.events).toHaveLength(8);
+    });
+  });
+
+  describe('checkAddressPosture', () => {
+    it('accepts standard full-body golf address posture', () => {
+      const frame = createTestPoseFrame(0, 0);
+      const result = checkAddressPosture(frame, 'FO');
+      expect(result.isValid).toBe(true);
+      expect(result.isRelaxed).toBe(false);
+    });
+
+    it('accepts relaxed address posture when lower body landmarks are missing', () => {
+      const frame = createTestPoseFrame(0, 0, {
+        [LandmarkID.leftKnee]: null,
+        [LandmarkID.rightKnee]: null,
+        [LandmarkID.leftAnkle]: null,
+        [LandmarkID.rightAnkle]: null,
+      });
+      const result = checkAddressPosture(frame, 'FO');
+      expect(result.isValid).toBe(true);
+      expect(result.isRelaxed).toBe(true);
+    });
+
+    it('rejects posture when hands are raised above shoulders', () => {
+      const frame = createTestPoseFrame(0, 0, {
+        [LandmarkID.leftWrist]: { x: 0.45, y: 0.15 }, // above shoulders at y=0.25
+        [LandmarkID.rightWrist]: { x: 0.55, y: 0.15 },
+      });
+      const result = checkAddressPosture(frame, 'FO');
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('Hands not hanging down below shoulders');
+    });
+
+    it('rejects posture when hands are stretched outside shoulder width in Face-On', () => {
+      const frame = createTestPoseFrame(0, 0, {
+        // Shoulders are at 0.42 and 0.58
+        [LandmarkID.leftWrist]: { x: 0.85, y: 0.50 }, // Far to the right
+        [LandmarkID.rightWrist]: { x: 0.90, y: 0.50 },
+      });
+      const result = checkAddressPosture(frame, 'FO');
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('Hands not centered');
+    });
+  });
+
+  describe('address posture validation in swing event detector', () => {
+    it('ignores early non-address stillness and picks the real address posture', () => {
+      // Create a 15-frame timeline:
+      // Frames 0-4: Still, but hands are raised above shoulders (e.g. adjusting hat/grip)
+      // Frames 5-9: Still, in valid golf address posture
+      // Frames 10-14: Takeaway motion
+      const frames: PoseFrame[] = [];
+      for (let i = 0; i < 5; i++) {
+        frames.push(
+          createTestPoseFrame(i / 15, i, {
+            [LandmarkID.leftWrist]: { x: 0.50, y: 0.15 },
+            [LandmarkID.rightWrist]: { x: 0.50, y: 0.15 },
+          })
+        );
+      }
+      for (let i = 5; i < 10; i++) {
+        frames.push(
+          createTestPoseFrame(i / 15, i, {
+            [LandmarkID.leftWrist]: { x: 0.45, y: 0.50 },
+            [LandmarkID.rightWrist]: { x: 0.55, y: 0.50 },
+          })
+        );
+      }
+      for (let i = 10; i < 15; i++) {
+        const step = (i - 9) * 0.05;
+        frames.push(
+          createTestPoseFrame(i / 15, i, {
+            [LandmarkID.leftWrist]: { x: 0.45 + step, y: 0.50 - step },
+            [LandmarkID.rightWrist]: { x: 0.55 + step, y: 0.50 - step },
+          })
+        );
+      }
+
+      const timeline = toTimeline(frames);
+      const result = detector.detect(timeline, { cameraView: 'FO', handedness: 'RIGHT', club: 'DRIVER' });
+
+      const address = getEventByType(result.events, 'ADDRESS');
+      expect(address?.status).toBe('RELIABLE');
+      // Address frame should be in the second still sequence (frames 5-9), around frame 7
+      expect(address?.frameIndex).toBeGreaterThanOrEqual(5);
+      expect(address?.frameIndex).toBeLessThan(10);
+    });
+
+    it('marks ADDRESS as NOT_RELIABLE when no golf address posture is adopted', () => {
+      // Stationary timeline where hands are always above shoulders
+      const frames: PoseFrame[] = [];
+      for (let i = 0; i < 10; i++) {
+        frames.push(
+          createTestPoseFrame(i / 15, i, {
+            [LandmarkID.leftWrist]: { x: 0.50, y: 0.15 },
+            [LandmarkID.rightWrist]: { x: 0.50, y: 0.15 },
+          })
+        );
+      }
+      const timeline = toTimeline(frames);
+      const result = detector.detect(timeline, DEFAULT_SWING_CONFIG);
+
+      const address = getEventByType(result.events, 'ADDRESS');
+      expect(address?.status).toBe('NOT_RELIABLE');
+      expect(result.warnings).toContain('No valid golf address posture detected');
+    });
+
+    it('emits warning when relaxed address posture is used', () => {
+      // Cropped timeline without legs
+      const frames: PoseFrame[] = [];
+      for (let i = 0; i < 5; i++) {
+        frames.push(
+          createTestPoseFrame(i / 15, i, {
+            [LandmarkID.leftKnee]: null,
+            [LandmarkID.rightKnee]: null,
+            [LandmarkID.leftAnkle]: null,
+            [LandmarkID.rightAnkle]: null,
+          })
+        );
+      }
+      const timeline = toTimeline(frames);
+      const result = detector.detect(timeline, DEFAULT_SWING_CONFIG);
+
+      const address = getEventByType(result.events, 'ADDRESS');
+      expect(address?.status).toBe('RELIABLE');
+      expect(result.warnings).toContain('Relaxed address posture criteria used: lower body landmarks not fully visible');
+    });
+  });
+
+  describe('cameraView support (FO and DTL)', () => {
+    it('detects events successfully with cameraView = FO', () => {
+      const timeline = createSwingTimeline({ duration: 3, fps: 15 });
+      const result = detector.detect(timeline, {
+        cameraView: 'FO',
+        handedness: 'RIGHT',
+        club: 'DRIVER',
+      });
+
+      expect(result.events).toHaveLength(8);
+      const address = getEventByType(result.events, 'ADDRESS');
+      const takeaway = getEventByType(result.events, 'TAKEAWAY');
+      const top = getEventByType(result.events, 'TOP');
+
+      expect(address?.status).toBe('RELIABLE');
+      expect(takeaway?.status).toBe('RELIABLE');
+      expect(top?.status).toBe('RELIABLE');
+      expect(takeaway?.signals.isDTL).toBe(false);
+      expect(top?.signals.isDTL).toBe(false);
+    });
+
+    it('detects events successfully with cameraView = DTL', () => {
+      const timeline = createSwingTimeline({ duration: 3, fps: 15 });
+      const result = detector.detect(timeline, {
+        cameraView: 'DTL',
+        handedness: 'RIGHT',
+        club: 'DRIVER',
+      });
+
+      expect(result.events).toHaveLength(8);
+      const address = getEventByType(result.events, 'ADDRESS');
+      const takeaway = getEventByType(result.events, 'TAKEAWAY');
+      const top = getEventByType(result.events, 'TOP');
+
+      expect(address?.status).toBe('RELIABLE');
+      expect(takeaway?.status).toBe('RELIABLE');
+      expect(top?.status).toBe('RELIABLE');
+      expect(takeaway?.signals.isDTL).toBe(true);
+      expect(top?.signals.isDTL).toBe(true);
     });
   });
 });

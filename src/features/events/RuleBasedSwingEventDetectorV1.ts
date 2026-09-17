@@ -8,7 +8,9 @@
  */
 
 import { PoseTimeline } from '@/features/timeline/PoseTimeline';
-import { SwingConfig } from '@/types/swing';
+import { CameraView, SwingConfig } from '@/types/swing';
+import { LandmarkID, isLandmarkVisible } from '@/types/landmarks';
+import { PoseFrame } from '@/types/pose';
 import {
   SwingEvent,
   SwingEventDetector,
@@ -22,6 +24,105 @@ import {
   extractHandDirection,
   extractWristHeight,
 } from './signalExtractors';
+
+// ─── Posture Validation ─────────────────────────────────────────────
+
+export interface PostureCheckResult {
+  readonly isValid: boolean;
+  readonly isRelaxed: boolean;
+  readonly reason?: string;
+}
+
+/**
+ * Validates that a pose frame corresponds to a plausible golf address setup posture.
+ *
+ * Strict check:
+ *  - Wrists hang down below shoulders (wristY > shoulderY + 0.10 in screen coords).
+ *  - Wrists are around hip level or between shoulders and knees.
+ *  - Shoulders are above hips (shoulderY < hipY).
+ *  - In Face-On (FO): Hands are centered between shoulders (with 0.08 margin).
+ *  - Lower body landmarks (knees, ankles) confirm an upright stance (hipY < kneeY < ankleY).
+ *
+ * Relaxed check (when lower body is cropped or not fully visible):
+ *  - Only upper body is verified (wrists hanging well below shoulders, shoulders above hips).
+ */
+export function checkAddressPosture(
+  frame: PoseFrame,
+  cameraView: CameraView = 'FO',
+): PostureCheckResult {
+  const lw = frame.landmarks.get(LandmarkID.leftWrist);
+  const rw = frame.landmarks.get(LandmarkID.rightWrist);
+  const ls = frame.landmarks.get(LandmarkID.leftShoulder);
+  const rs = frame.landmarks.get(LandmarkID.rightShoulder);
+
+  // Upper body landmarks must be visible
+  if (!isLandmarkVisible(lw) || !isLandmarkVisible(rw) || !isLandmarkVisible(ls) || !isLandmarkVisible(rs)) {
+    return { isValid: false, isRelaxed: false, reason: 'Key upper body landmarks missing or low confidence' };
+  }
+
+  const wristY = (lw!.y + rw!.y) / 2;
+  const shoulderY = (ls!.y + rs!.y) / 2;
+  const wristX = (lw!.x + rw!.x) / 2;
+
+  // Wrists must hang down significantly below shoulders (in screen coords, Y increases downwards)
+  if (wristY <= shoulderY + 0.10) {
+    return { isValid: false, isRelaxed: false, reason: 'Hands not hanging down below shoulders' };
+  }
+
+  // Check hips if visible
+  const lh = frame.landmarks.get(LandmarkID.leftHip);
+  const rh = frame.landmarks.get(LandmarkID.rightHip);
+  const hipsVisible = isLandmarkVisible(lh) && isLandmarkVisible(rh);
+
+  if (hipsVisible) {
+    const hipY = (lh!.y + rh!.y) / 2;
+    // Shoulders must be above hips
+    if (shoulderY >= hipY) {
+      return { isValid: false, isRelaxed: false, reason: 'Body not upright (shoulders at or below hips)' };
+    }
+    // Wrists should be at least partway down from shoulders toward hips
+    if (wristY < shoulderY + (hipY - shoulderY) * 0.40) {
+      return { isValid: false, isRelaxed: false, reason: 'Hands too high relative to hips' };
+    }
+  }
+
+  // Face-On centering check
+  if (cameraView === 'FO') {
+    const minShoulderX = Math.min(ls!.x, rs!.x) - 0.08;
+    const maxShoulderX = Math.max(ls!.x, rs!.x) + 0.08;
+    if (wristX < minShoulderX || wristX > maxShoulderX) {
+      return { isValid: false, isRelaxed: false, reason: 'Hands not centered in front of body for Face-On view' };
+    }
+  }
+
+  // Check lower body (knees and ankles) for strict posture validation
+  const lk = frame.landmarks.get(LandmarkID.leftKnee);
+  const rk = frame.landmarks.get(LandmarkID.rightKnee);
+  const la = frame.landmarks.get(LandmarkID.leftAnkle);
+  const ra = frame.landmarks.get(LandmarkID.rightAnkle);
+  const lowerBodyVisible = isLandmarkVisible(lk) && isLandmarkVisible(rk) && isLandmarkVisible(la) && isLandmarkVisible(ra);
+
+  if (lowerBodyVisible && hipsVisible) {
+    const hipY = (lh!.y + rh!.y) / 2;
+    const kneeY = (lk!.y + rk!.y) / 2;
+    const ankleY = (la!.y + ra!.y) / 2;
+
+    // Upright progression: hip < knee < ankle
+    if (hipY >= kneeY || kneeY >= ankleY) {
+      return { isValid: false, isRelaxed: false, reason: 'Lower body not in upright stance' };
+    }
+
+    // Hands must not be hanging below the knees
+    if (wristY > kneeY) {
+      return { isValid: false, isRelaxed: false, reason: 'Hands positioned below knees' };
+    }
+
+    return { isValid: true, isRelaxed: false };
+  }
+
+  // If lower body is not visible, but upper body criteria passed, accept as relaxed
+  return { isValid: true, isRelaxed: true };
+}
 
 // ─── Configuration ──────────────────────────────────────────────────
 
@@ -116,27 +217,51 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
       };
     }
 
+    const cameraView = swingConfig.cameraView ?? 'FO';
+    const handedness = swingConfig.handedness ?? 'RIGHT';
+
     // Extract signals
     const velocities = extractHandVelocity(timeline);
-    const directions = extractHandDirection(timeline, swingConfig.handedness);
+    const directions = extractHandDirection(timeline, handedness, cameraView);
     const wristHeights = extractWristHeight(timeline);
     const handCenters = extractHandCenter(timeline);
 
     const frameCount = timeline.frames.length;
 
     // Detect each event
-    const addressResult = this.detectAddress(velocities, timeline, frameCount);
-    const takeawayResult = this.detectTakeaway(velocities, directions, timeline, addressResult.frameIndex, frameCount);
-    const topResult = this.detectTop(wristHeights, directions, timeline, takeawayResult.frameIndex, frameCount);
+    const addressResult = this.detectAddress(velocities, timeline, frameCount, cameraView);
+    if (addressResult.usedRelaxed) {
+      warnings.push('Relaxed address posture criteria used: lower body landmarks not fully visible');
+    }
+    if (addressResult.event.status !== 'RELIABLE') {
+      warnings.push('No valid golf address posture detected');
+    }
+
+    const takeawayResult = this.detectTakeaway(
+      velocities,
+      directions,
+      timeline,
+      addressResult.event.frameIndex,
+      frameCount,
+      cameraView,
+    );
+    const topResult = this.detectTop(
+      wristHeights,
+      directions,
+      timeline,
+      takeawayResult.frameIndex,
+      frameCount,
+      cameraView,
+    );
     const midBackswingResult = this.detectMidBackswing(wristHeights, timeline, takeawayResult.frameIndex, topResult.frameIndex);
-    const impactResult = this.detectImpactProxy(wristHeights, velocities, timeline, topResult.frameIndex, frameCount, addressResult);
+    const impactResult = this.detectImpactProxy(wristHeights, velocities, timeline, topResult.frameIndex, frameCount, addressResult.event);
     const midDownswingResult = this.detectMidDownswing(velocities, timeline, topResult.frameIndex, impactResult.frameIndex);
     const midFollowThroughResult = this.detectMidFollowThrough(velocities, timeline, impactResult.frameIndex, frameCount);
     const finishResult = this.detectFinish(velocities, timeline, impactResult.frameIndex, frameCount);
 
     // Build the events array in canonical order
     const events: SwingEvent[] = [
-      addressResult,
+      addressResult.event,
       takeawayResult,
       midBackswingResult,
       topResult,
@@ -168,57 +293,81 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
 
   /**
    * ADDRESS: First run of N consecutive frames where hand velocity
-   * is below the stillness threshold. Picks the middle frame of the run.
+   * is below stillness threshold AND body posture matches golf setup.
    */
   private detectAddress(
     velocities: number[],
     timeline: PoseTimeline,
     frameCount: number,
-  ): SwingEvent {
+    cameraView: CameraView = 'FO',
+  ): { event: SwingEvent; usedRelaxed: boolean } {
     const { stillnessVelocityThreshold, stillnessMinFrames } = this.config;
     let consecutiveStill = 0;
     let runStart = 0;
+    let usedRelaxed = false;
 
     for (let i = 0; i < frameCount; i++) {
       const v = velocities[i];
-      if (!isNaN(v) && v <= stillnessVelocityThreshold) {
-        if (consecutiveStill === 0) runStart = i;
+      const frame = timeline.frames[i];
+      const posture = checkAddressPosture(frame, cameraView);
+
+      if (!isNaN(v) && v <= stillnessVelocityThreshold && posture.isValid) {
+        if (consecutiveStill === 0) {
+          runStart = i;
+          usedRelaxed = posture.isRelaxed;
+        } else if (posture.isRelaxed) {
+          usedRelaxed = true;
+        }
         consecutiveStill++;
         if (consecutiveStill >= stillnessMinFrames) {
           const midIdx = Math.floor((runStart + i) / 2);
-          const frame = timeline.frames[midIdx];
+          const midFrame = timeline.frames[midIdx];
           const avgVel = this.averageInRange(velocities, runStart, i);
           const clarity = 1 - (avgVel / stillnessVelocityThreshold);
-          return reliableEvent('ADDRESS', midIdx, frame.timestamp * 1000, clarity, {
-            avgVelocity: avgVel,
-            stillFrames: consecutiveStill,
-          });
+          return {
+            event: reliableEvent('ADDRESS', midIdx, midFrame.timestamp * 1000, clarity, {
+              avgVelocity: avgVel,
+              stillFrames: consecutiveStill,
+              postureValidated: true,
+              relaxedPosture: usedRelaxed,
+            }),
+            usedRelaxed,
+          };
         }
       } else {
         consecutiveStill = 0;
       }
     }
 
-    // If the timeline is a single frame or very short, allow it as address
+    // Single frame fallback
     if (frameCount === 1) {
       const v = velocities[0];
-      if (!isNaN(v) && v <= stillnessVelocityThreshold) {
+      const posture = checkAddressPosture(timeline.frames[0], cameraView);
+      if (!isNaN(v) && v <= stillnessVelocityThreshold && posture.isValid) {
         const clarity = 1 - (v / stillnessVelocityThreshold);
-        return reliableEvent('ADDRESS', 0, timeline.frames[0].timestamp * 1000, clarity, {
-          avgVelocity: v,
-          stillFrames: 1,
-        });
+        return {
+          event: reliableEvent('ADDRESS', 0, timeline.frames[0].timestamp * 1000, clarity, {
+            avgVelocity: v,
+            stillFrames: 1,
+            postureValidated: true,
+            relaxedPosture: posture.isRelaxed,
+          }),
+          usedRelaxed: posture.isRelaxed,
+        };
       }
     }
 
-    return unreliableEvent('ADDRESS');
+    return {
+      event: unreliableEvent('ADDRESS'),
+      usedRelaxed: false,
+    };
   }
 
   // ─── TAKEAWAY Detection ─────────────────────────────────────────
 
   /**
    * TAKEAWAY: First frame after ADDRESS where hand velocity exceeds the
-   * movement threshold AND hand direction is away from target (negative).
+   * movement threshold AND hand direction is away from target / into backswing.
    */
   private detectTakeaway(
     velocities: number[],
@@ -226,6 +375,7 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
     timeline: PoseTimeline,
     addressFrame: number | null,
     frameCount: number,
+    cameraView: CameraView = 'FO',
   ): SwingEvent {
     const { movementVelocityThreshold } = this.config;
     const startSearch = addressFrame !== null ? addressFrame + 1 : 0;
@@ -241,6 +391,7 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
           velocity: v,
           direction: d,
           isAwayFromTarget: true,
+          isDTL: cameraView === 'DTL',
         });
       }
     }
@@ -261,6 +412,7 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
     timeline: PoseTimeline,
     takeawayFrame: number | null,
     frameCount: number,
+    cameraView: CameraView = 'FO',
   ): SwingEvent {
     const startSearch = takeawayFrame !== null ? takeawayFrame + 1 : 0;
     const { directionChangeMinDelta } = this.config;
@@ -280,7 +432,7 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
         downswingFrames = 0; // Reset if we found a new high
       }
 
-      // If we have a peak and hand is moving positively (towards target) -> downswing
+      // If we have a peak and hand is moving positively (downswing)
       if (!isNaN(d) && maxIdx !== -1) {
         if (d > directionChangeMinDelta) {
           downswingFrames++;
@@ -302,6 +454,7 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
       return reliableEvent('TOP', maxIdx, frame.timestamp * 1000, confidence, {
         wristHeight: maxHeight,
         frameIndex: maxIdx,
+        isDTL: cameraView === 'DTL',
       });
     }
 

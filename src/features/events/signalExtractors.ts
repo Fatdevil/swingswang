@@ -9,9 +9,10 @@
 
 import { PoseTimeline } from '@/features/timeline/PoseTimeline';
 import { LandmarkID, isLandmarkVisible } from '@/types/landmarks';
-import { GolferHandedness } from '@/types/swing';
+import { CameraView, GolferHandedness } from '@/types/swing';
 
 // ─── Hand Center ────────────────────────────────────────────────────
+
 
 /** Midpoint of both wrists, with average confidence. */
 export interface HandCenterPoint {
@@ -72,27 +73,30 @@ export function extractHandVelocity(timeline: PoseTimeline): number[] {
 // ─── Hand Direction ─────────────────────────────────────────────────
 
 /**
- * Direction of hand movement along the X-axis.
- * Positive = toward target (trail→lead side), negative = away from target.
+ * Direction of hand movement.
  *
+ * For Face-On (FO):
+ * Along the X-axis: Positive = toward target (trail→lead side), negative = away from target.
  * For RIGHT-handed: lead side is LEFT (lower X in normalized coords).
  *   Moving toward target = negative X movement → we negate so positive = toward.
  * For LEFT-handed: lead side is RIGHT (higher X in normalized coords).
  *   Moving toward target = positive X movement → already positive.
+ *
+ * For Down-the-Line (DTL):
+ * Camera looks down target line.
+ * Upward movement into backswing arc = negative (decreasing Y in screen coords).
+ * Downward movement toward impact/ball = positive (increasing Y in screen coords).
  *
  * First frame direction is 0.
  */
 export function extractHandDirection(
   timeline: PoseTimeline,
   handedness: GolferHandedness,
+  cameraView: CameraView = 'FO',
 ): number[] {
   const centers = extractHandCenter(timeline);
   if (centers.length === 0) return [];
 
-  // For RIGHT-handed golfer, target is to the LEFT (lower X),
-  // so moving toward target means dx < 0. We negate to make positive = toward target.
-  // For LEFT-handed golfer, target is to the RIGHT (higher X),
-  // so moving toward target means dx > 0.
   const sign = handedness === 'RIGHT' ? -1 : 1;
 
   const directions: number[] = [0];
@@ -101,8 +105,13 @@ export function extractHandDirection(
     const curr = centers[i];
     const dt = timeline.frames[i].timestamp - timeline.frames[i - 1].timestamp;
 
-    if (isNaN(prev.x) || isNaN(curr.x) || dt <= 0) {
+    if (isNaN(prev.x) || isNaN(curr.x) || isNaN(prev.y) || isNaN(curr.y) || dt <= 0) {
       directions.push(NaN);
+    } else if (cameraView === 'DTL') {
+      // In DTL: moving downward toward ball/impact (increasing Y in screen coords) is positive.
+      // Moving upward into backswing (decreasing Y in screen coords) is negative.
+      const dy = curr.y - prev.y;
+      directions.push(dy / dt);
     } else {
       directions.push(((curr.x - prev.x) * sign) / dt);
     }
