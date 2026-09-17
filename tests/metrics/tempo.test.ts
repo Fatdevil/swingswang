@@ -132,6 +132,27 @@ describe('Tempo Metric', () => {
       const result = tempoMetric.calculate(timeline, makeConfig(), events);
       expect(result.value).toBeCloseTo(2.0, 1);
     });
+
+    it('uses TAKEAWAY when present instead of ADDRESS, ignoring long address pauses', () => {
+      const frames = createSwingSequence(60);
+      const timeline = makeTimeline(frames);
+
+      // Long pause at address (address at 0.1s, takeaway at 1.1s, top at 2.0s, impact at 2.3s)
+      // If using address: backswing = 1.9s, downswing = 0.3s -> ratio = 6.33:1 (wrong!)
+      // Using takeaway: backswing = 0.9s, downswing = 0.3s -> ratio = 3.0:1 (correct!)
+      const events = makeEvents({
+        ADDRESS: { timestamp: 0.1, frameIndex: 1, confidence: 0.9 },
+        TAKEAWAY: { timestamp: 1.1, frameIndex: 16, confidence: 0.9 },
+        TOP: { timestamp: 2.0, frameIndex: 30, confidence: 0.9 },
+        IMPACT_PROXY: { timestamp: 2.3, frameIndex: 34, confidence: 0.9 },
+      });
+
+      const result = tempoMetric.calculate(timeline, makeConfig(), events);
+      expect(result.value).not.toBeNull();
+      expect(result.value).toBeCloseTo(3.0, 1);
+      expect(result.evidence.startEvent).toBe('TAKEAWAY');
+      expect(result.evidence.takeawayTimestamp).toBe(1.1);
+    });
   });
 
   describe('velocity fallback', () => {

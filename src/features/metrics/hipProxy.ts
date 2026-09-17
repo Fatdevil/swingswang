@@ -9,6 +9,8 @@ import { LandmarkID, HIP_LANDMARKS } from '../../types/landmarks';
 import { MetricResult, reliabilityFromConfidence, notReliableResult } from '../../types/metrics';
 import { PoseTimeline } from '../timeline/PoseTimeline';
 import { calculateConfidence } from '../confidence/ConfidenceEngine';
+import { SwingEventResult } from '../events/types';
+import { extractSwingWindow, getAddressReferenceFrames } from './swingWindow';
 import { Point2D, midpoint, distance, referencePosition, maximumDisplacement } from '../../utils/geometry';
 import { roundTo } from '../../utils/math';
 import { Logger } from '../../utils/logger';
@@ -18,8 +20,12 @@ const METRIC_ID = 'hipMovementProxy';
 const METRIC_NAME = 'Hip Movement Proxy';
 
 /** Calculate lateral hip movement, normalized by hip width. */
-export function calculateHipMovementProxy(timeline: PoseTimeline): MetricResult {
-  const reliableFrames = timeline.reliableFrames;
+export function calculateHipMovementProxy(
+  timeline: PoseTimeline,
+  events?: SwingEventResult,
+): MetricResult {
+  const windowInfo = extractSwingWindow(timeline, events);
+  const reliableFrames = windowInfo.reliableWindowFrames;
 
   if (reliableFrames.length < 3) {
     return notReliableResult(METRIC_ID, METRIC_NAME, 'Not enough reliable frames for hip movement analysis.');
@@ -51,12 +57,32 @@ export function calculateHipMovementProxy(timeline: PoseTimeline): MetricResult 
     return notReliableResult(METRIC_ID, METRIC_NAME, 'Cannot calculate hip width for normalization.');
   }
 
-  // Reference position from first N frames
+  // Reference position: extract from address frames if events are present, otherwise first N frames
   const refCount = Math.max(
     MIN_REFERENCE_FRAMES,
     Math.min(MAX_REFERENCE_FRAMES, Math.floor(hipPositions.length * REFERENCE_FRAME_RATIO))
   );
-  const refPos = referencePosition(hipPositions, refCount);
+
+  let refPos: Point2D | null = null;
+  if (windowInfo.hasEvents && windowInfo.addressFrameIndex !== null) {
+    const addressFrames = getAddressReferenceFrames(reliableFrames, windowInfo.addressFrameIndex, refCount);
+    const addressHipPoints: Point2D[] = [];
+    for (const frame of addressFrames) {
+      const lh = frame.landmarks.get(LandmarkID.leftHip);
+      const rh = frame.landmarks.get(LandmarkID.rightHip);
+      if (lh && rh && lh.confidence > 0.3 && rh.confidence > 0.3) {
+        addressHipPoints.push(midpoint({ x: lh.x, y: lh.y }, { x: rh.x, y: rh.y }));
+      }
+    }
+    if (addressHipPoints.length > 0) {
+      refPos = referencePosition(addressHipPoints, addressHipPoints.length);
+    }
+  }
+
+  if (!refPos) {
+    refPos = referencePosition(hipPositions, refCount);
+  }
+
   if (!refPos) {
     return notReliableResult(METRIC_ID, METRIC_NAME, 'Cannot establish reference hip position.');
   }

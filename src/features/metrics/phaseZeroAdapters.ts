@@ -12,6 +12,7 @@ import { PoseTimeline } from '@/features/timeline/PoseTimeline';
 import { SwingConfig, CameraView } from '@/types/swing';
 import { LandmarkID } from '@/types/landmarks';
 import { MetricResult } from '@/types/metrics';
+import { SwingEventResult } from '@/features/events/types';
 import { calculateHeadMovement } from './headMovement';
 import { calculateTorsoAngleChange } from './torsoAngle';
 import { calculateHipMovementProxy } from './hipProxy';
@@ -53,8 +54,8 @@ export const headMovementEntry: MetricRegistryEntry = {
     LandmarkID.rightShoulder,
   ],
   requiredConfidence: 0.3,
-  calculate(timeline: PoseTimeline, _config: SwingConfig): MetricResultV1 {
-    const result = calculateHeadMovement(timeline);
+  calculate(timeline: PoseTimeline, _config: SwingConfig, events?: SwingEventResult): MetricResultV1 {
+    const result = calculateHeadMovement(timeline, events);
     return adaptMetricResult(result, 'BOTH', this.version);
   },
 };
@@ -71,8 +72,8 @@ export const torsoAngleEntry: MetricRegistryEntry = {
     LandmarkID.rightHip,
   ],
   requiredConfidence: 0.3,
-  calculate(timeline: PoseTimeline, _config: SwingConfig): MetricResultV1 {
-    const result = calculateTorsoAngleChange(timeline);
+  calculate(timeline: PoseTimeline, _config: SwingConfig, events?: SwingEventResult): MetricResultV1 {
+    const result = calculateTorsoAngleChange(timeline, events);
     return adaptMetricResult(result, 'BOTH', this.version);
   },
 };
@@ -87,8 +88,8 @@ export const hipProxyEntry: MetricRegistryEntry = {
     LandmarkID.rightHip,
   ],
   requiredConfidence: 0.3,
-  calculate(timeline: PoseTimeline, _config: SwingConfig): MetricResultV1 {
-    const result = calculateHipMovementProxy(timeline);
+  calculate(timeline: PoseTimeline, _config: SwingConfig, events?: SwingEventResult): MetricResultV1 {
+    const result = calculateHipMovementProxy(timeline, events);
     return adaptMetricResult(result, 'BOTH', this.version);
   },
 };

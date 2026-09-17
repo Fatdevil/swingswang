@@ -17,6 +17,7 @@ import {
   notReliableResultV1,
 } from './registry';
 import { calculateConfidence } from '@/features/confidence/ConfidenceEngine';
+import { extractSwingWindow, getAddressReferenceFrames } from './swingWindow';
 import { Point2D, midpoint, distance } from '@/utils/geometry';
 import { roundTo } from '@/utils/math';
 import { Logger } from '@/utils/logger';
@@ -43,7 +44,7 @@ const MIN_FRAMES = 5; // PROVISIONAL
 function calculatePelvisSway(
   timeline: PoseTimeline,
   config: SwingConfig,
-  _events?: SwingEventResult,
+  events?: SwingEventResult,
 ): MetricResultV1 {
   // Only supported from Face-On view
   if (config.cameraView !== 'FO') {
@@ -56,7 +57,8 @@ function calculatePelvisSway(
     );
   }
 
-  const reliableFrames = timeline.reliableFrames;
+  const windowInfo = extractSwingWindow(timeline, events);
+  const reliableFrames = windowInfo.reliableWindowFrames;
 
   if (reliableFrames.length < MIN_FRAMES) {
     return notReliableResultV1(
@@ -119,13 +121,32 @@ function calculatePelvisSway(
     );
   }
 
-  // Reference X position from first N frames (address position)
+  // Reference X position (address position): extract from address frames if events are present, otherwise first N frames
   const refCount = Math.max(
     MIN_REFERENCE_FRAMES,
     Math.min(MAX_REFERENCE_FRAMES, Math.floor(hipMidpoints.length * REFERENCE_FRAME_RATIO)),
   );
-  const refXPositions = hipMidpoints.slice(0, refCount).map((p) => p.x);
-  const addressX = refXPositions.reduce((s, x) => s + x, 0) / refXPositions.length;
+
+  let addressX: number | null = null;
+  if (windowInfo.hasEvents && windowInfo.addressFrameIndex !== null) {
+    const addressFrames = getAddressReferenceFrames(reliableFrames, windowInfo.addressFrameIndex, refCount);
+    const addressMidpoints: number[] = [];
+    for (const frame of addressFrames) {
+      const lh = frame.landmarks.get(LandmarkID.leftHip);
+      const rh = frame.landmarks.get(LandmarkID.rightHip);
+      if (lh && rh && lh.confidence > 0.3 && rh.confidence > 0.3) {
+        addressMidpoints.push((lh.x + rh.x) / 2);
+      }
+    }
+    if (addressMidpoints.length > 0) {
+      addressX = addressMidpoints.reduce((s, x) => s + x, 0) / addressMidpoints.length;
+    }
+  }
+
+  if (addressX === null) {
+    const refXPositions = hipMidpoints.slice(0, refCount).map((p) => p.x);
+    addressX = refXPositions.reduce((s, x) => s + x, 0) / refXPositions.length;
+  }
 
   // Calculate max lateral displacement from address (X-axis only)
   let maxLateralDisplacement = 0;

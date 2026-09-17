@@ -9,6 +9,8 @@ import { LandmarkID, HEAD_LANDMARKS, SHOULDER_LANDMARKS } from '../../types/land
 import { MetricResult, reliabilityFromConfidence, notReliableResult } from '../../types/metrics';
 import { PoseTimeline } from '../timeline/PoseTimeline';
 import { calculateConfidence } from '../confidence/ConfidenceEngine';
+import { SwingEventResult } from '../events/types';
+import { extractSwingWindow, getAddressReferenceFrames } from './swingWindow';
 import {
   Point2D,
   midpoint,
@@ -24,8 +26,12 @@ const METRIC_ID = 'headMovement';
 const METRIC_NAME = 'Head Movement';
 
 /** Calculate head displacement from address position, normalized by shoulder width. */
-export function calculateHeadMovement(timeline: PoseTimeline): MetricResult {
-  const reliableFrames = timeline.reliableFrames;
+export function calculateHeadMovement(
+  timeline: PoseTimeline,
+  events?: SwingEventResult,
+): MetricResult {
+  const windowInfo = extractSwingWindow(timeline, events);
+  const reliableFrames = windowInfo.reliableWindowFrames;
 
   if (reliableFrames.length < 3) {
     return notReliableResult(METRIC_ID, METRIC_NAME, 'Not enough reliable frames for head movement analysis.');
@@ -60,12 +66,27 @@ export function calculateHeadMovement(timeline: PoseTimeline): MetricResult {
     return notReliableResult(METRIC_ID, METRIC_NAME, 'Shoulder landmarks unavailable for normalization.');
   }
 
-  // Reference position from first N frames
+  // Reference position: extract from address frames if events are present, otherwise first N frames
   const refCount = Math.max(
     MIN_REFERENCE_FRAMES,
     Math.min(MAX_REFERENCE_FRAMES, Math.floor(headPositions.length * REFERENCE_FRAME_RATIO))
   );
-  const refPos = referencePosition(headPositions, refCount);
+
+  let refPos: Point2D | null = null;
+  if (windowInfo.hasEvents && windowInfo.addressFrameIndex !== null) {
+    const addressFrames = getAddressReferenceFrames(reliableFrames, windowInfo.addressFrameIndex, refCount);
+    const addressHeadPoints = addressFrames
+      .map(f => getHeadCenter(f.landmarks))
+      .filter((p): p is Point2D => p !== null);
+    if (addressHeadPoints.length > 0) {
+      refPos = referencePosition(addressHeadPoints, addressHeadPoints.length);
+    }
+  }
+
+  if (!refPos) {
+    refPos = referencePosition(headPositions, refCount);
+  }
+
   if (!refPos) {
     return notReliableResult(METRIC_ID, METRIC_NAME, 'Cannot establish reference head position.');
   }

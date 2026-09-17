@@ -60,19 +60,24 @@ function calculateTempo(
 
   // ── Try event-based calculation first ──
   if (events && events.detectedCount > 0) {
+    const takeawayEvent = events.events.find(e => e.event === 'TAKEAWAY' && e.timestampMs !== null);
     const addressEvent = events.events.find(e => e.event === 'ADDRESS' && e.timestampMs !== null);
     const topEvent = events.events.find(e => e.event === 'TOP' && e.timestampMs !== null);
     const impactEvent = events.events.find(e => e.event === 'IMPACT_PROXY' && e.timestampMs !== null);
 
+    // Prefer TAKEAWAY as movement start; fallback to ADDRESS if TAKEAWAY is not detected
+    const startEvent = takeawayEvent ?? addressEvent;
+    const startEventType = takeawayEvent ? 'TAKEAWAY' : 'ADDRESS';
+
     if (
-      addressEvent?.timestampMs !== undefined && addressEvent.timestampMs !== null &&
+      startEvent?.timestampMs !== undefined && startEvent.timestampMs !== null &&
       topEvent?.timestampMs !== undefined && topEvent.timestampMs !== null &&
       impactEvent?.timestampMs !== undefined && impactEvent.timestampMs !== null
     ) {
-      const addressTime = addressEvent.timestampMs / 1000;
+      const startTime = startEvent.timestampMs / 1000;
       const topTime = topEvent.timestampMs / 1000;
       const impactTime = impactEvent.timestampMs / 1000;
-      const backswingDuration = topTime - addressTime;
+      const backswingDuration = topTime - startTime;
       const downswingDuration = impactTime - topTime;
 
       if (backswingDuration > 0 && downswingDuration > 0) {
@@ -85,11 +90,19 @@ function calculateTempo(
         );
 
         Logger.metrics.info('Tempo calculated (event-based)', {
+          startEvent: startEventType,
           backswingMs: roundTo(backswingDuration * 1000, 0),
           downswingMs: roundTo(downswingDuration * 1000, 0),
           ratio: roundTo(ratio, 2),
           confidence: roundTo(confidence, 3),
         });
+
+        const addressTime = addressEvent?.timestampMs !== undefined && addressEvent.timestampMs !== null
+          ? addressEvent.timestampMs / 1000
+          : null;
+        const takeawayTime = takeawayEvent?.timestampMs !== undefined && takeawayEvent.timestampMs !== null
+          ? takeawayEvent.timestampMs / 1000
+          : null;
 
         return {
           id: METRIC_ID,
@@ -103,14 +116,16 @@ function calculateTempo(
           warnings: [],
           evidence: {
             method: 'event_based',
+            startEvent: startEventType,
             backswingDurationMs: roundTo(backswingDuration * 1000, 0),
             downswingDurationMs: roundTo(downswingDuration * 1000, 0),
-            addressTimestamp: roundTo(addressTime, 3),
+            takeawayTimestamp: takeawayTime !== null ? roundTo(takeawayTime, 3) : null,
+            addressTimestamp: addressTime !== null ? roundTo(addressTime, 3) : null,
             topTimestamp: roundTo(topTime, 3),
             impactTimestamp: roundTo(impactTime, 3),
           },
           calculationExplanation:
-            `Tempo ratio calculated from swing events: ` +
+            `Tempo ratio calculated from swing events (${startEventType}→TOP / TOP→IMPACT): ` +
             `backswing ${roundTo(backswingDuration * 1000, 0)}ms / ` +
             `downswing ${roundTo(downswingDuration * 1000, 0)}ms = ` +
             `${roundTo(ratio, 2)}:1. Ideal is approximately 3:1.`,

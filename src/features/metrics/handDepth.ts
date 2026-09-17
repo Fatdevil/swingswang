@@ -17,6 +17,7 @@ import {
   notReliableResultV1,
 } from './registry';
 import { calculateConfidence } from '@/features/confidence/ConfidenceEngine';
+import { extractSwingWindow } from './swingWindow';
 import { distance, Point2D } from '@/utils/geometry';
 import { roundTo } from '@/utils/math';
 import { Logger } from '@/utils/logger';
@@ -43,7 +44,7 @@ const MIN_CONF = 0.3;
 function calculateHandDepth(
   timeline: PoseTimeline,
   config: SwingConfig,
-  _events?: SwingEventResult,
+  events?: SwingEventResult,
 ): MetricResultV1 {
   // Only supported from DTL view
   if (config.cameraView !== 'DTL') {
@@ -56,7 +57,8 @@ function calculateHandDepth(
     );
   }
 
-  const reliableFrames = timeline.reliableFrames;
+  const windowInfo = extractSwingWindow(timeline, events);
+  const reliableFrames = windowInfo.reliableWindowFrames;
 
   if (reliableFrames.length < MIN_FRAMES) {
     return notReliableResultV1(

@@ -8,6 +8,7 @@
 import { pelvisSwayMetric } from '@/features/metrics/pelvisSway';
 import { PoseTimeline } from '@/features/timeline/PoseTimeline';
 import { SwingConfig } from '@/types/swing';
+import { SwingEventResult } from '@/features/events/types';
 import { LandmarkID } from '@/types/landmarks';
 import { createTestPoseFrame, createStationarySequence } from '../helpers/poseFixtures';
 
@@ -93,6 +94,52 @@ describe('Pelvis Sway Metric', () => {
 
       // Same raw shift but wider hips → smaller normalized value
       expect(wideResult.value!).toBeLessThan(narrowResult.value!);
+    });
+
+    it('ignores pre-address and post-finish hip movement when events are provided', () => {
+      // 30 frames:
+      // Frames 0-4: Golfer walks into frame, hips shift wildly (x + 0.20)
+      // Frame 5-9: ADDRESS at normal position (shift = 0)
+      // Frames 10-15: Swing with small sway (shift = 0.02)
+      // Frame 16-20: FINISH at normal position (shift = 0)
+      // Frames 21-29: Golfer walks away, hips shift wildly (x + 0.30)
+      const frames = [];
+      for (let i = 0; i < 30; i++) {
+        const t = i / 15;
+        let shift = 0;
+        if (i < 5) shift = 0.20; // pre-swing walk
+        else if (i >= 10 && i <= 15) shift = 0.02; // true swing sway
+        else if (i >= 21) shift = 0.30; // post-swing walk
+
+        frames.push(
+          createTestPoseFrame(t, i, {
+            [LandmarkID.leftHip]: { x: 0.45 + shift, y: 0.55 },
+            [LandmarkID.rightHip]: { x: 0.55 + shift, y: 0.55 },
+          })
+        );
+      }
+      const timeline = makeTimeline(frames);
+
+      // Without events, the 0.30 shift from walking away pollutes the metric
+      const withoutEvents = pelvisSwayMetric.calculate(timeline, makeConfig('FO'));
+      expect(withoutEvents.value!).toBeGreaterThan(1.0); // huge sway due to walking
+
+      // With events, only the 0.02 swing sway within [ADDRESS, FINISH] is measured
+      const events: SwingEventResult = {
+        events: [
+          { event: 'ADDRESS', timestampMs: (7 / 15) * 1000, frameIndex: 7, confidence: 0.9, status: 'RELIABLE', signals: {} },
+          { event: 'TOP', timestampMs: (12 / 15) * 1000, frameIndex: 12, confidence: 0.9, status: 'RELIABLE', signals: {} },
+          { event: 'IMPACT_PROXY', timestampMs: (14 / 15) * 1000, frameIndex: 14, confidence: 0.9, status: 'RELIABLE', signals: {} },
+          { event: 'FINISH', timestampMs: (18 / 15) * 1000, frameIndex: 18, confidence: 0.9, status: 'RELIABLE', signals: {} },
+        ],
+        detectedCount: 4,
+        reliableCount: 4,
+        temporalOrderValid: true,
+        warnings: [],
+      };
+
+      const withEvents = pelvisSwayMetric.calculate(timeline, makeConfig('FO'), events);
+      expect(withEvents.value!).toBeLessThan(0.3); // confined to swing sway
     });
   });
 
