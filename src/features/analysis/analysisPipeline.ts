@@ -20,6 +20,7 @@ import { buildTimeline } from '@/features/timeline/timelineBuilder';
 import { PoseTimeline } from '@/features/timeline/PoseTimeline';
 import { ANALYSIS_FRAME_RATE } from '@/constants/config';
 import { Logger, PerformanceTimer } from '@/utils/logger';
+import { normalizeTimestampToRealSeconds } from '@/features/video/slowMotionDetector';
 
 // V1 features imports
 import { evaluateVideoQuality } from '@/features/quality/VideoQualityEngine';
@@ -59,6 +60,7 @@ export async function runAnalysisPipeline(
   engineConfig?: PoseEngineConfig,
   isCancelled?: () => boolean,
   swingConfig?: SwingConfig,
+  timeRange?: { startTime: number; endTime: number },
 ): Promise<PipelineResult> {
   const pipelineTimer = new PerformanceTimer('analysisPipeline');
 
@@ -103,7 +105,8 @@ export async function runAnalysisPipeline(
       metadata.duration,
       ANALYSIS_FRAME_RATE,
       (progress) => onStatus({ type: 'extracting', progress }),
-      isCancelled
+      isCancelled,
+      timeRange
     );
     const extDurationMs = extractionTimer.stop();
     stageTimings['extraction'] = extDurationMs;
@@ -112,7 +115,7 @@ export async function runAnalysisPipeline(
       startMs: extStartMs,
       durationMs: extDurationMs,
       status: frames.length > 0 ? 'OK' : 'ERROR',
-      inputSummary: { duration: metadata.duration },
+      inputSummary: { duration: metadata.duration, timeRange },
       outputSummary: { framesExtracted: frames.length },
     });
 
@@ -154,10 +157,23 @@ export async function runAnalysisPipeline(
       throw new Error('No person detected in any frame. Ensure the golfer is visible in the video.');
     }
 
-    const totalVideoFrames = Math.round(metadata.duration * (metadata.frameRate || 30));
+    const clipDuration = timeRange
+      ? Math.max(0.1, Math.min(metadata.duration, timeRange.endTime) - Math.max(0, timeRange.startTime))
+      : metadata.duration;
+    const totalVideoFrames = Math.round(clipDuration * (metadata.frameRate || 30));
+
+    // Normalize timestamps to real elapsed seconds if video is in slow-motion
+    const speedMultiplier = metadata.slowMotion?.speedMultiplier ?? 1.0;
+    const effectiveAnalysisFps = ANALYSIS_FRAME_RATE * speedMultiplier;
+    const normalizedPoseFrames = metadata.slowMotion?.isSlowMotion
+      ? poseFrames.map(f => ({
+          ...f,
+          timestamp: normalizeTimestampToRealSeconds(f.timestamp, metadata.slowMotion),
+        }))
+      : poseFrames;
 
     // 4. Build raw timeline for quality checks
-    const rawTimeline = buildTimeline(poseFrames, totalVideoFrames, pipelineTimer.elapsed(), ANALYSIS_FRAME_RATE);
+    const rawTimeline = buildTimeline(normalizedPoseFrames, totalVideoFrames, pipelineTimer.elapsed(), effectiveAnalysisFps);
 
     // 5. Evaluate video quality (Finding 4: Quality Gate)
     const qualStartMs = pipelineTimer.elapsed();
@@ -178,13 +194,13 @@ export async function runAnalysisPipeline(
     // 6. Run pose stabilization
     const stabStartMs = pipelineTimer.elapsed();
     const stabilizationTimer = new PerformanceTimer('stage.stabilization');
-    const stabilizationResult = stabilizePoseTimeline(poseFrames);
+    const stabilizationResult = stabilizePoseTimeline(normalizedPoseFrames);
     const stabilizedFrames = stabilizationResult.frames;
     const stabilizedTimeline = buildTimeline(
       stabilizedFrames,
       totalVideoFrames,
       pipelineTimer.elapsed(),
-      ANALYSIS_FRAME_RATE
+      effectiveAnalysisFps
     );
     const stabDurationMs = stabilizationTimer.stop();
     stageTimings['stabilization'] = stabDurationMs;

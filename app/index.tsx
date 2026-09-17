@@ -30,9 +30,11 @@ import { ScoreCard } from '../src/components/home/ScoreCard';
 import { StreakCard } from '../src/components/home/StreakCard';
 import { PracticeHub } from '../src/components/home/PracticeHub';
 import { SwingSetupCard } from '../src/components/home/SwingSetupCard';
+import { SwingTrimmerCard } from '../src/components/home/SwingTrimmerCard';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [trimRange, setTrimRange] = React.useState<{ startTime: number; endTime: number } | null>(null);
   const {
     videoSource,
     status,
@@ -57,8 +59,19 @@ export default function HomeScreen() {
   const engineAvailability = checkRealEngineAvailability();
   const isMockBlocked = !__DEV__ && !debugMode && !engineAvailability.available;
 
+  useEffect(() => {
+    if (videoSource?.metadata.duration) {
+      setTrimRange({
+        startTime: 0,
+        endTime: Number(videoSource.metadata.duration.toFixed(1)),
+      });
+    } else {
+      setTrimRange(null);
+    }
+  }, [videoSource?.uri, videoSource?.metadata.duration]);
+
   const handleAnalyze = async () => {
-    const success = await startAnalysis();
+    const success = await startAnalysis(trimRange ?? undefined);
     if (success) {
       router.push('/player');
     }
@@ -178,7 +191,9 @@ export default function HomeScreen() {
                       }
                     ]}
                   >
-                    {engineAvailability.available ? 'REAL (ExecuTorch Linked)' : 'MOCK (Simulation)'}
+                    {engineAvailability.available
+                      ? (engineAvailability.provider === 'MEDIAPIPE_WEB' ? 'REAL (MediaPipe Web/Wasm)' : 'REAL (MediaPipe Native)')
+                      : 'MOCK (Simulation)'}
                   </Text>
                 </View>
                 <View style={styles.metaRow}>
@@ -204,13 +219,23 @@ export default function HomeScreen() {
               </Card>
 
               {!engineAvailability.available && (
-                <View style={styles.mockCallout} accessible={true} accessibilityRole="alert" accessibilityLabel="Running in Simulation Mode. Create a Native Development Build to enable real pose inference.">
+                <View style={styles.mockCallout} accessible={true} accessibilityRole="alert" accessibilityLabel="Running in Simulation Mode.">
                   <Ionicons name="warning" size={16} color="#F59E0B" />
                   <Text style={styles.mockCalloutText}>
-                    Running in Simulation Mode. Create a Native Development Build to enable real YOLO pose inference.
+                    Running in Simulation Mode. Run in browser with WebAssembly or create a Native Development Build to enable real pose inference.
                   </Text>
                 </View>
               )}
+
+              {/* Swing Trimmer Card */}
+              <SwingTrimmerCard
+                duration={videoSource.metadata.duration}
+                slowMotion={videoSource.metadata.slowMotion}
+                startTime={trimRange?.startTime ?? 0}
+                endTime={trimRange?.endTime ?? Number(videoSource.metadata.duration.toFixed(1))}
+                onRangeChange={setTrimRange}
+                disabled={isProcessing(status)}
+              />
 
               {/* Swing Configuration Selectors */}
               <SwingSetupCard

@@ -14,6 +14,7 @@ import {
   MAX_ABSOLUTE_DURATION,
   MIN_DURATION,
 } from '../../constants/config';
+import { detectSlowMotion } from './slowMotionDetector';
 
 /**
  * Safely normalize video duration across Web and Native platforms.
@@ -195,7 +196,7 @@ export function buildMetadata(asset: ImagePicker.ImagePickerAsset, durationOverr
     duration = normalizeDuration(asset.duration);
   }
 
-  return {
+  const baseMetadata: VideoMetadata = {
     duration,
     width,
     height,
@@ -203,6 +204,13 @@ export function buildMetadata(asset: ImagePicker.ImagePickerAsset, durationOverr
     frameRate: null, // ImagePicker doesn't provide frame rate
     fileSize: asset.fileSize ?? null,
     mimeType: asset.mimeType ?? null,
+  };
+
+  const slowMotion = detectSlowMotion(baseMetadata);
+
+  return {
+    ...baseMetadata,
+    slowMotion,
   };
 }
 

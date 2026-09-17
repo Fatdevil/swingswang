@@ -5,6 +5,22 @@
  * Video source and metadata types.
  */
 
+/** Slow-motion capture and playback information. */
+export interface SlowMotionInfo {
+  /** Whether the video is determined to be slow-motion. */
+  readonly isSlowMotion: boolean;
+  /** Effective capture frame rate (e.g. 240, 120, 60, 30). */
+  readonly captureFps: number;
+  /** Playback retiming multiplier (e.g. 8.0 for 240fps retimed to 30fps). */
+  readonly speedMultiplier: number;
+  /** Detection method used. */
+  readonly method: 'METADATA' | 'KINEMATIC' | 'MANUAL';
+  /** Confidence of detection (0-1). */
+  readonly confidence: number;
+  /** Human-readable explanation. */
+  readonly description: string;
+}
+
 /** Metadata extracted from an imported video. */
 export interface VideoMetadata {
   /** Duration in seconds. */
@@ -21,6 +37,8 @@ export interface VideoMetadata {
   readonly fileSize: number | null;
   /** MIME type if available. */
   readonly mimeType: string | null;
+  /** Detected or configured slow-motion properties. */
+  readonly slowMotion?: SlowMotionInfo;
 }
 
 /** A video ready for analysis. */

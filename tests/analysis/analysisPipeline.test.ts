@@ -175,4 +175,21 @@ describe('runAnalysisPipeline V1 Integration', () => {
     expect(isAnalysisResultV2({})).toBe(false);
     expect(isAnalysisResultV2(null)).toBe(false);
   });
+
+  it('respects timeRange trimming during analysis', async () => {
+    const result = await runAnalysisPipeline(
+      'file://test-video.mp4',
+      mockMetadata,
+      () => {},
+      { mode: 'MOCK' },
+      undefined,
+      mockSwingConfig,
+      { startTime: 1.0, endTime: 2.0 }
+    );
+
+    // Frame count should be bounded by the trimmed interval (1.0s to 2.0s = ~16 frames)
+    expect(result.timeline.frames.length).toBeLessThan(25);
+    expect(result.timeline.frames.length).toBeGreaterThanOrEqual(14);
+    expect(result.timeline.frames[0].timestamp).toBeGreaterThanOrEqual(1.0);
+  });
 });

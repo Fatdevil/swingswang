@@ -155,36 +155,31 @@ describe('Tempo Metric', () => {
     });
   });
 
-  describe('velocity fallback', () => {
-    it('falls back to velocity-based calculation without events', () => {
+  describe('Truth Gate / Abstention', () => {
+    it('abstains and returns null without events', () => {
       const frames = createSwingSequence(60);
       const timeline = makeTimeline(frames);
 
       const result = tempoMetric.calculate(timeline, makeConfig());
 
       expect(result.id).toBe('tempo');
-      // Without events, should attempt velocity fallback — may succeed or return NOT_RELIABLE
-      if (result.status !== 'NOT_RELIABLE') {
-        expect(result.evidence.method).toBe('velocity_fallback');
-        expect(result.warnings.length).toBeGreaterThan(0);
-      } else {
-        // NOT_RELIABLE is acceptable if the synthetic data lacks clear velocity phases
-        expect(result.value).toBeNull();
-      }
+      expect(result.status).toBe('NOT_RELIABLE');
+      expect(result.value).toBeNull();
+      expect(result.warnings.some(w => w.includes('Saknas'))).toBe(true);
     });
 
-    it('falls back when events are empty', () => {
+    it('abstains when events are empty or missing TOP/IMPACT', () => {
       const frames = createSwingSequence(60);
       const timeline = makeTimeline(frames);
-      const events = makeEvents({});
+      const events = makeEvents({
+        ADDRESS: { timestamp: 0.1, frameIndex: 1, confidence: 0.9 },
+        // Missing TOP and IMPACT_PROXY
+      });
 
       const result = tempoMetric.calculate(timeline, makeConfig(), events);
-      // Empty events should use velocity fallback path
-      if (result.status !== 'NOT_RELIABLE') {
-        expect(result.evidence.method).toBe('velocity_fallback');
-      } else {
-        expect(result.value).toBeNull();
-      }
+      expect(result.status).toBe('NOT_RELIABLE');
+      expect(result.value).toBeNull();
+      expect(result.warnings.some(w => w.includes('TOP, IMPACT_PROXY'))).toBe(true);
     });
   });
 

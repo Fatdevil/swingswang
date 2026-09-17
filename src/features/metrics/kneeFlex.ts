@@ -230,15 +230,16 @@ function calculateKneeFlex(
       cameraView: config.cameraView,
     },
     calculationExplanation:
-      `Knee angle (hip→knee→ankle) measured across swing. ` +
+      `Knee flexion change from address setup (hip→knee→ankle) measured across swing. ` +
       `Lead knee: address ${leadAddressAngle !== null ? roundTo(leadAddressAngle, 1) + '°' : 'N/A'}, ` +
       `max change ${roundTo(leadMaxChange, 1)}°. ` +
       `Trail knee: address ${trailAddressAngle !== null ? roundTo(trailAddressAngle, 1) + '°' : 'N/A'}, ` +
       `max change ${roundTo(trailMaxChange, 1)}°. ` +
       `Dominant change on ${dominantSide} side: ${roundTo(maxAngleChange, 1)}°.`,
     limitations: [
-      '2D projected knee angle from monocular camera.',
-      'Ankle/knee detection accuracy varies with clothing.',
+      '2D projected knee angle change from monocular camera relative to address setup.',
+      'Measures delta from address, not absolute 3D anatomical joint angle.',
+      'Ankle/knee detection accuracy varies with clothing and footwear.',
       'More reliable from Face-On than Down-the-Line view.',
       'This is NOT a clinical joint-angle measurement.',
     ],

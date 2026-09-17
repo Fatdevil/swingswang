@@ -34,12 +34,14 @@ export function checkVideoSuitability(metadata: VideoMetadata): VideoSuitability
   let status: QualityStatus = 'PASS';
 
   // ── Duration checks ───────────────────────────────────────────────
+  const speedMult = metadata.slowMotion?.speedMultiplier ?? 1.0;
+  const effectiveDuration = metadata.duration / speedMult;
 
-  if (metadata.duration < minVideoDuration) {
+  if (effectiveDuration < minVideoDuration) {
     status = 'FAIL';
     warnings.push({
       code: 'VIDEO_TOO_SHORT',
-      message: `Video is too short (${metadata.duration.toFixed(1)}s). Minimum is ${minVideoDuration}s.`,
+      message: `Video is too short (${effectiveDuration.toFixed(1)}s real time). Minimum is ${minVideoDuration}s.`,
       severity: 'error',
     });
   } else if (metadata.duration > absoluteMaxDuration) {
@@ -50,12 +52,21 @@ export function checkVideoSuitability(metadata: VideoMetadata): VideoSuitability
       severity: 'error',
     });
   } else if (metadata.duration > maxVideoDuration) {
-    if (status === 'PASS') status = 'WARNING';
-    warnings.push({
-      code: 'VIDEO_TOO_LONG',
-      message: `Video is longer than recommended (${metadata.duration.toFixed(1)}s). Recommended max is ${maxVideoDuration}s.`,
-      severity: 'warning',
-    });
+    // If it's a recognized slow-motion video, don't penalize if effective duration is reasonable
+    if (metadata.slowMotion?.isSlowMotion && effectiveDuration <= maxVideoDuration) {
+      warnings.push({
+        code: 'SLOW_MOTION_APPLIED',
+        message: `Slow-motion aktiv (${metadata.slowMotion.description}). Effektiv svingtid: ${effectiveDuration.toFixed(1)}s.`,
+        severity: 'info' as any,
+      });
+    } else {
+      if (status === 'PASS') status = 'WARNING';
+      warnings.push({
+        code: 'VIDEO_TOO_LONG',
+        message: `Video is longer than recommended (${metadata.duration.toFixed(1)}s). Recommended max is ${maxVideoDuration}s.`,
+        severity: 'warning',
+      });
+    }
   }
 
   // ── Orientation check ─────────────────────────────────────────────

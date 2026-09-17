@@ -20,12 +20,15 @@ async function extractFramesWeb(
   duration: number,
   safeFrameRate: number,
   onProgress?: (progress: number) => void,
-  isCancelled?: () => boolean
+  isCancelled?: () => boolean,
+  timeRange?: { startTime: number; endTime: number }
 ): Promise<FrameData[]> {
   const safeDuration = Math.min(duration, MAX_ABSOLUTE_DURATION);
   const intervalSeconds = 1.0 / safeFrameRate;
+  const start = timeRange ? Math.max(0, timeRange.startTime) : 0;
+  const end = timeRange ? Math.min(safeDuration, timeRange.endTime) : safeDuration;
   const timestamps: number[] = [];
-  for (let t = 0; t < safeDuration; t += intervalSeconds) {
+  for (let t = start; t <= end; t += intervalSeconds) {
     timestamps.push(t);
   }
 
@@ -126,7 +129,8 @@ export async function extractFrames(
   duration: number,
   frameRate: number = ANALYSIS_FRAME_RATE,
   onProgress?: (progress: number) => void,
-  isCancelled?: () => boolean
+  isCancelled?: () => boolean,
+  timeRange?: { startTime: number; endTime: number }
 ): Promise<FrameData[]> {
   // Validate numeric input arguments (Finding 11)
   if (!Number.isFinite(duration) || duration <= 0) {
@@ -138,7 +142,7 @@ export async function extractFrames(
 
   // If running in a web browser environment, use HTML5 video & canvas
   if (Platform.OS === 'web' && typeof document !== 'undefined') {
-    const frames = await extractFramesWeb(uri, duration, safeFrameRate, onProgress, isCancelled);
+    const frames = await extractFramesWeb(uri, duration, safeFrameRate, onProgress, isCancelled, timeRange);
     const elapsed = timer.stop();
     Logger.video.info(`Web frame extraction complete: ${frames.length} frames in ${elapsed.toFixed(0)}ms`);
     return frames;
@@ -149,13 +153,15 @@ export async function extractFrames(
 
   // Calculate timestamps at the desired frame rate
   const intervalSeconds = 1.0 / safeFrameRate;
+  const start = timeRange ? Math.max(0, timeRange.startTime) : 0;
+  const end = timeRange ? Math.min(safeDuration, timeRange.endTime) : safeDuration;
   const timestamps: number[] = [];
 
-  for (let t = 0; t < safeDuration; t += intervalSeconds) {
+  for (let t = start; t <= end; t += intervalSeconds) {
     timestamps.push(t);
   }
 
-  Logger.video.info(`Extracting ${timestamps.length} frames at ${safeFrameRate}fps from ${safeDuration.toFixed(1)}s video (original: ${duration.toFixed(1)}s)`);
+  Logger.video.info(`Extracting ${timestamps.length} frames at ${safeFrameRate}fps between ${start.toFixed(1)}s-${end.toFixed(1)}s from ${safeDuration.toFixed(1)}s video (original: ${duration.toFixed(1)}s)`);
 
   const frames: FrameData[] = [];
 

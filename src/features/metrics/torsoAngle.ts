@@ -16,7 +16,7 @@ import { roundTo } from '../../utils/math';
 import { Logger } from '../../utils/logger';
 
 const METRIC_ID = 'torsoAngleChange';
-const METRIC_NAME = 'Torso Angle Change';
+const METRIC_NAME = 'Spine Tilt Change (2D)';
 
 /** Calculate the maximum torso angle change from the address position. */
 export function calculateTorsoAngleChange(
@@ -123,11 +123,11 @@ export function calculateTorsoAngleChange(
     framesUsed: angles.length,
     warnings: factors.warnings,
     calculationExplanation:
-      `Torso angle measured from hip midpoint to shoulder midpoint relative to vertical. ` +
+      `2D spinal tilt angle measured from hip midpoint to shoulder midpoint relative to vertical. ` +
       `Address angle: ${roundTo(addressAngle, 1)}°. Maximum change: ${roundTo(maxChange, 1)}°. ` +
       `Based on ${angles.length} frames.`,
     limitations: [
-      '2D projected measurement from monocular camera.',
+      '2D projected measurement in camera plane — reflects 2D spinal tilt, not 3D axial torso rotation.',
       'Camera should be roughly perpendicular to the golfer for best accuracy.',
       'This is NOT a lab-grade 3D measurement.',
       'Occluded shoulders or hips reduce accuracy.',

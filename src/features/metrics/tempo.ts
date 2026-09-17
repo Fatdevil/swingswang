@@ -141,8 +141,30 @@ function calculateTempo(
     }
   }
 
-  // ── Fallback: estimate from wrist velocity ──
-  return calculateTempoFromVelocity(timeline, config);
+  // ── Truth Gate / Strict Abstention ──
+  // If TOP or IMPACT_PROXY are missing, ABSTAIN from guessing bogus tempo.
+  const missing: string[] = [];
+  const hasStart = events?.events.some(e => (e.event === 'TAKEAWAY' || e.event === 'ADDRESS') && e.timestampMs !== null);
+  const hasTop = events?.events.some(e => e.event === 'TOP' && e.timestampMs !== null);
+  const hasImpact = events?.events.some(e => e.event === 'IMPACT_PROXY' && e.timestampMs !== null);
+
+  if (!hasStart) missing.push('TAKEAWAY/ADDRESS');
+  if (!hasTop) missing.push('TOP');
+  if (!hasImpact) missing.push('IMPACT_PROXY');
+
+  const reason = missing.length > 0
+    ? `Svingtempo kräver verifierade händelser. Saknas: ${missing.join(', ')}.`
+    : 'Kunde inte fastställa giltig tidsordning för svingfaser.';
+
+  Logger.metrics.warn('Tempo calculation abstained', { reason, missing });
+
+  return notReliableResultV1(
+    METRIC_ID,
+    METRIC_NAME,
+    reason,
+    'BOTH',
+    METRIC_VERSION,
+  );
 }
 
 /** Fallback tempo estimation using wrist velocity patterns. */

@@ -62,7 +62,7 @@ export const headMovementEntry: MetricRegistryEntry = {
 
 export const torsoAngleEntry: MetricRegistryEntry = {
   id: 'torsoAngleChange',
-  displayName: 'Torso Angle Change',
+  displayName: 'Spine Tilt Change (2D)',
   version: '0.1.0',
   supportedViews: ['DTL', 'FO'],
   requiredLandmarks: [

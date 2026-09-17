@@ -52,10 +52,12 @@ export class MockPoseEngine implements PoseEngine {
 
   private initialized = false;
   private swingDuration = 3.0; // typical swing duration
+  private firstTimestamp: number | null = null;
 
   async initialize(): Promise<void> {
     Logger.pose.info('MockPoseEngine: initialized');
     this.initialized = true;
+    this.firstTimestamp = null;
   }
 
   async analyzeFrame(
@@ -72,7 +74,12 @@ export class MockPoseEngine implements PoseEngine {
     // Simulate processing delay (10-30ms)
     await new Promise(resolve => setTimeout(resolve, 10 + Math.random() * 20));
 
-    const landmarks = this.generateSwingPose(timestamp, frameIndex);
+    if (this.firstTimestamp === null) {
+      this.firstTimestamp = timestamp;
+    }
+    const relativeTime = Math.max(0, timestamp - this.firstTimestamp);
+
+    const landmarks = this.generateSwingPose(relativeTime, frameIndex);
     const processingTimeMs = timer.stop();
 
     const confidences = Array.from(landmarks.values()).map(l => l.confidence);
@@ -93,6 +100,7 @@ export class MockPoseEngine implements PoseEngine {
 
   dispose(): void {
     this.initialized = false;
+    this.firstTimestamp = null;
   }
 
   /** Generate a swing-like pose for a given timestamp. */
@@ -107,58 +115,72 @@ export class MockPoseEngine implements PoseEngine {
 
     // Swing motion model:
     // 0.0–0.2: Address (still)
-    // 0.2–0.5: Backswing (rotation)
-    // 0.5–0.7: Downswing + Impact
-    // 0.7–1.0: Follow-through
+    // Swing motion model:
+    // 0.00–0.20: Address (still setup posture)
+    // 0.20–0.65: Backswing (arms ascend to top of backswing)
+    // 0.65–0.78: Downswing & Impact (rapid descent to impact)
+    // 0.78–1.00: Follow-through (finish pose)
 
     for (const [id, baseX, baseY] of BASE_POSE) {
       let dx = 0;
       let dy = 0;
 
-      if (phase < 0.2) {
-        // Address — very small natural movement
-        dx = (Math.random() - 0.5) * 0.003;
+      const isWrist = id === LandmarkID.leftWrist || id === LandmarkID.rightWrist;
+      const isElbow = id === LandmarkID.leftElbow || id === LandmarkID.rightElbow;
+      const isShoulder = id === LandmarkID.leftShoulder || id === LandmarkID.rightShoulder;
+      const isHip = id === LandmarkID.leftHip || id === LandmarkID.rightHip;
+      const isHead = id === LandmarkID.nose || id === LandmarkID.leftEye || id === LandmarkID.rightEye || id === LandmarkID.leftEar || id === LandmarkID.rightEar;
+
+      if (phase < 0.20) {
+        // Address — very small natural micro-sway
+        dx = (Math.random() - 0.5) * 0.002;
         dy = (Math.random() - 0.5) * 0.002;
-      } else if (phase < 0.5) {
-        // Backswing
-        const backswingProgress = (phase - 0.2) / 0.3;
-        const isUpperBody = id <= LandmarkID.rightWrist;
-        const isLeftSide = [
-          LandmarkID.leftEye, LandmarkID.leftEar, LandmarkID.leftShoulder,
-          LandmarkID.leftElbow, LandmarkID.leftWrist, LandmarkID.leftHip,
-          LandmarkID.leftKnee, LandmarkID.leftAnkle,
-        ].includes(id);
-
-        if (isUpperBody) {
-          // Upper body rotates in backswing
-          dx = -backswingProgress * 0.04 * (isLeftSide ? 1.2 : 0.8);
-          dy = -backswingProgress * 0.01;
+      } else if (phase < 0.65) {
+        // Backswing (takeaway -> top): hands move trail-side (+X) and up (-Y)
+        const backProgress = (phase - 0.20) / 0.45;
+        if (isWrist) {
+          dx = backProgress * 0.16;
+          dy = -backProgress * 0.32; // wrists lift from 0.53 to 0.21 (top of backswing)
+        } else if (isElbow) {
+          dx = backProgress * 0.10;
+          dy = -backProgress * 0.20;
+        } else if (isShoulder) {
+          dx = (id === LandmarkID.leftShoulder ? 1 : -1) * 0.03 * backProgress + backProgress * 0.02;
+          dy = (id === LandmarkID.leftShoulder ? 0.02 : -0.02) * backProgress;
+        } else if (isHip) {
+          dx = backProgress * 0.015;
+        } else if (isHead) {
+          dx = backProgress * 0.008;
         }
-        // Head stays relatively still
-        if (id === LandmarkID.nose || id === LandmarkID.leftEye || id === LandmarkID.rightEye) {
-          dx *= 0.3;
-        }
-      } else if (phase < 0.7) {
-        // Downswing + impact
-        const downswingProgress = (phase - 0.5) / 0.2;
-        const isUpperBody = id <= LandmarkID.rightWrist;
-
-        if (isUpperBody) {
-          dx = (downswingProgress * 0.06 - 0.04);
-          dy = downswingProgress * 0.005;
-        }
-        // Hips shift slightly toward target
-        if (id === LandmarkID.leftHip || id === LandmarkID.rightHip) {
-          dx = downswingProgress * 0.025;
+      } else if (phase < 0.78) {
+        // Downswing to impact (rapid acceleration toward target / lead-side -X and down +Y)
+        const downProgress = (phase - 0.65) / 0.13;
+        if (isWrist) {
+          dx = 0.16 - downProgress * 0.18; // sweeps down to impact point
+          dy = -0.32 + downProgress * 0.32; // descends rapidly back to impact height (0.53)
+        } else if (isElbow) {
+          dx = 0.10 - downProgress * 0.12;
+          dy = -0.20 + downProgress * 0.20;
+        } else if (isShoulder) {
+          dx = (0.5 - downProgress) * 0.04;
+          dy = (downProgress - 0.5) * 0.02;
+        } else if (isHip) {
+          dx = 0.015 - downProgress * 0.03; // hip bump toward target
         }
       } else {
-        // Follow-through
-        const followProgress = (phase - 0.7) / 0.3;
-        const isUpperBody = id <= LandmarkID.rightWrist;
-
-        if (isUpperBody) {
-          dx = 0.02 + followProgress * 0.03;
+        // Follow-through & finish: hands sweep up (-Y) and target-side (-X)
+        const followProgress = (phase - 0.78) / 0.22;
+        if (isWrist) {
+          dx = -0.02 - followProgress * 0.18;
+          dy = -followProgress * 0.33; // finishes high at target side
+        } else if (isElbow) {
+          dx = -followProgress * 0.12;
+          dy = -followProgress * 0.22;
+        } else if (isShoulder) {
+          dx = -followProgress * 0.04;
           dy = -followProgress * 0.02;
+        } else if (isHip) {
+          dx = -0.015 - followProgress * 0.015;
         }
       }
 

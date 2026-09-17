@@ -10,7 +10,7 @@
 export type PoseEngineMode = 'REAL' | 'MOCK';
 
 /** Available pose engine providers. */
-export type PoseEngineProvider = 'MEDIAPIPE' | 'MOCK';
+export type PoseEngineProvider = 'MEDIAPIPE' | 'MEDIAPIPE_WEB' | 'MOCK';
 
 /** Configuration for pose engine creation. */
 /** MediaPipe model variant selection. */

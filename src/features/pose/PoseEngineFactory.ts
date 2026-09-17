@@ -21,10 +21,32 @@ import { Platform } from 'react-native';
  */
 export function checkRealEngineAvailability(): PoseEngineAvailability {
   if (Platform.OS === 'web') {
+    const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
+    if (!isBrowser) {
+      return {
+        available: false,
+        provider: null,
+        reason: 'MediaPipe Web pose engine requires a browser environment.',
+      };
+    }
+
+    try {
+      const tasksVision = require('@mediapipe/tasks-vision');
+      if (tasksVision && tasksVision.PoseLandmarker) {
+        return {
+          available: true,
+          provider: 'MEDIAPIPE_WEB',
+          reason: 'MediaPipe WebAssembly pose engine available in browser.',
+        };
+      }
+    } catch {
+      // not available
+    }
+
     return {
       available: false,
       provider: null,
-      reason: 'Native MediaPipe pose engine is not available on web platform.',
+      reason: 'MediaPipe Tasks Vision is not available on web platform.',
     };
   }
 
@@ -73,6 +95,13 @@ export function createPoseEngine(config: PoseEngineConfig): PoseEngine {
     throw new Error(
       `Real pose analysis is unavailable in this build. ${availability.reason}`
     );
+  }
+
+  if (availability.provider === 'MEDIAPIPE_WEB') {
+    const { MediaPipeWebPoseEngine } = require('./MediaPipeWebPoseEngine');
+    const variant = config.modelVariant ?? 'lite';
+    Logger.pose.info(`Creating MediaPipeWebPoseEngine (real mode, variant: ${variant})`);
+    return new MediaPipeWebPoseEngine(variant);
   }
 
   if (availability.provider === 'MEDIAPIPE') {

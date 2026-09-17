@@ -86,6 +86,9 @@ export default function ResultsScreen() {
 
   const pose = analysisResult.pose;
   const processing = analysisResult.processing;
+  const isMockEngine =
+    (pose as any)?.engineMode === 'MOCK' ||
+    pose?.providerName === 'MockPoseEngine';
 
   // Extract warnings list
   const warningList: string[] = isV1OrV2
@@ -116,10 +119,23 @@ export default function ResultsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Truth Gate Banner */}
+        {isMockEngine && (
+          <View style={styles.truthGateBanner}>
+            <Text style={styles.truthGateIcon}>🛡️</Text>
+            <View style={styles.truthGateTextContainer}>
+              <Text style={styles.truthGateTitle}>Truth Gate: Syntetisk Testdata (Demoläge)</Text>
+              <Text style={styles.truthGateText}>
+                Denna analys kördes med MockPoseEngine i webbläsaren. Resultaten är syntetiska och speglar inte din verkliga sving. Officiell svingpoäng och coachningsråd är därför blockerade tills analys körs med skarp AI.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Header */}
         <Text style={styles.title} accessibilityRole="header">Analysis Results</Text>
         <Text style={styles.subtitle}>
-          {isV1OrV2 ? 'Phase 1+' : 'Phase 0'} • Schema v{analysisResult.schemaVersion}
+          {isV1OrV2 ? 'Phase 1+' : 'Phase 0'} • Schema v{analysisResult.schemaVersion} {isMockEngine ? '• [DEMO / MOCK]' : ''}
         </Text>
 
         {/* Metrics */}
@@ -215,6 +231,38 @@ const styles = StyleSheet.create({
   scroll: {
     padding: SPACING.lg,
     paddingBottom: SPACING.xxl * 2,
+  },
+  truthGateBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+    borderColor: 'rgba(59, 130, 246, 0.4)',
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.md,
+    padding: SPACING.md,
+    gap: SPACING.sm,
+  },
+  truthGateIcon: {
+    fontSize: 18,
+    marginTop: 1,
+  },
+  truthGateTextContainer: {
+    flex: 1,
+  },
+  truthGateTitle: {
+    fontFamily: FONT_FAMILY,
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.bold as any,
+    color: '#60a5fa',
+    marginBottom: 2,
+  },
+  truthGateText: {
+    fontFamily: FONT_FAMILY,
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textSecondary,
+    lineHeight: 16,
   },
   empty: {
     flex: 1,

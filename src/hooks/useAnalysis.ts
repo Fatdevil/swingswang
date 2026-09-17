@@ -54,7 +54,7 @@ export function useAnalysis() {
   }, [dispatch]);
 
   /** Run the full analysis pipeline on the loaded video. Returns true on success. */
-  const startAnalysis = useCallback(async (): Promise<boolean> => {
+  const startAnalysis = useCallback(async (timeRange?: { startTime: number; endTime: number }): Promise<boolean> => {
     if (!state.videoSource) {
       Logger.video.warn('startAnalysis called without video source');
       return false;
@@ -81,7 +81,8 @@ export function useAnalysis() {
         (status) => dispatch({ type: 'SET_STATUS', payload: status }),
         engineConfig,
         undefined, // isCancelled
-        state.swingConfig
+        state.swingConfig,
+        timeRange
       );
 
       dispatch({ type: 'SET_TIMELINE', payload: result.timeline });
