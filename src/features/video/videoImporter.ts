@@ -34,26 +34,30 @@ export function normalizeDuration(rawDuration: number | null | undefined): numbe
 }
 
 /**
- * Web-specific fallback to extract duration using an in-memory HTML5 video element.
+ * Web-specific fallback to extract duration and dimensions using an in-memory HTML5 video element.
  */
-async function getWebVideoDuration(uri: string): Promise<number> {
-  if (typeof document === 'undefined') return 0;
+async function getWebVideoMetadata(uri: string): Promise<{ duration: number; width: number; height: number }> {
+  if (typeof document === 'undefined') return { duration: 0, width: 0, height: 0 };
   return new Promise((resolve) => {
     try {
       const video = document.createElement('video');
       video.src = uri;
       video.preload = 'metadata';
-      const timeout = setTimeout(() => resolve(0), 3000);
+      const timeout = setTimeout(() => resolve({ duration: 0, width: 0, height: 0 }), 3000);
       video.onloadedmetadata = () => {
         clearTimeout(timeout);
-        resolve(video.duration || 0);
+        resolve({
+          duration: video.duration || 0,
+          width: video.videoWidth || 0,
+          height: video.videoHeight || 0,
+        });
       };
       video.onerror = () => {
         clearTimeout(timeout);
-        resolve(0);
+        resolve({ duration: 0, width: 0, height: 0 });
       };
     } catch {
-      resolve(0);
+      resolve({ duration: 0, width: 0, height: 0 });
     }
   });
 }
@@ -95,20 +99,30 @@ export async function selectVideo(): Promise<VideoSource | null> {
 
     // Normalize duration according to platform
     let durationSeconds = normalizeDuration(asset.duration);
-    if (durationSeconds <= 0) {
+    let webDimensions: { width?: number; height?: number } | undefined;
+
+    if (Platform.OS === 'web') {
+      try {
+        const webMeta = await getWebVideoMetadata(asset.uri);
+        if (durationSeconds <= 0 && webMeta.duration > 0) {
+          durationSeconds = webMeta.duration;
+        }
+        if (webMeta.width > 0 && webMeta.height > 0) {
+          webDimensions = { width: webMeta.width, height: webMeta.height };
+        }
+      } catch (err) {
+        Logger.video.error('Web metadata extraction error', { error: String(err) });
+      }
+    } else if (durationSeconds <= 0) {
       Logger.video.info('Selected video duration is 0 or null. Attempting fallback duration extraction...');
       try {
-        if (Platform.OS === 'web') {
-          durationSeconds = await getWebVideoDuration(asset.uri);
-        } else {
-          durationSeconds = await getFallbackDuration(asset.uri);
-        }
+        durationSeconds = await getFallbackDuration(asset.uri);
       } catch (err) {
         Logger.video.error('Fallback duration extraction error', { error: String(err) });
       }
     }
 
-    const metadata = buildMetadata(asset, durationSeconds);
+    const metadata = buildMetadata(asset, durationSeconds, webDimensions);
 
     return {
       uri: asset.uri,
@@ -185,9 +199,13 @@ async function getFallbackDuration(uri: string): Promise<number> {
 }
 
 /** Build VideoMetadata from an ImagePicker asset. */
-export function buildMetadata(asset: ImagePicker.ImagePickerAsset, durationOverride?: number): VideoMetadata {
-  const width = asset.width || 0;
-  const height = asset.height || 0;
+export function buildMetadata(
+  asset: ImagePicker.ImagePickerAsset,
+  durationOverride?: number,
+  dimensionsOverride?: { width?: number; height?: number }
+): VideoMetadata {
+  const width = dimensionsOverride?.width || asset.width || 0;
+  const height = dimensionsOverride?.height || asset.height || 0;
   let duration = 0;
 
   if (durationOverride !== undefined && durationOverride > 0) {

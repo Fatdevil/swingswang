@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, Dimensions, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, useWindowDimensions, ScrollView, TouchableOpacity } from 'react-native';
 import { VideoView } from 'expo-video';
 import { useRouter } from 'expo-router';
 import { useAnalysis } from '../src/hooks/useAnalysis';
@@ -18,7 +18,6 @@ import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/con
 import { reliabilityColor } from '../src/types/metrics';
 import { reliabilityFromConfidence } from '../src/types/metrics';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
 const PLAYBACK_RATES = [0.25, 0.5, 1.0];
 
 export default function PlayerScreen() {
@@ -36,9 +35,10 @@ export default function PlayerScreen() {
     setRate,
   } = useVideoPlayer(videoSource?.uri ?? '', poseTimeline);
 
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [rateIndex, setRateIndex] = useState(2); // 1.0x default
   const [showSkeleton, setShowSkeleton] = useState(true);
-  const [videoLayout, setVideoLayout] = useState({ width: SCREEN_WIDTH, height: 500 });
+  const [videoLayout, setVideoLayout] = useState({ width: windowWidth, height: 500 });
 
   const cycleRate = () => {
     const nextIndex = (rateIndex + 1) % PLAYBACK_RATES.length;
@@ -59,9 +59,7 @@ export default function PlayerScreen() {
 
   const videoWidth = videoSource.metadata.width || 1080;
   const videoHeight = videoSource.metadata.height || 1920;
-  const videoAspect = videoWidth / videoHeight;
-  const displayWidth = SCREEN_WIDTH;
-  const displayHeight = displayWidth / videoAspect;
+  const containerHeight = Math.min(Math.max(320, windowHeight * 0.65), 520);
 
   const isMockEngine =
     (analysisResult?.pose as any)?.engineMode === 'MOCK' ||
@@ -89,16 +87,20 @@ export default function PlayerScreen() {
         )}
 
         {/* Video + Overlay */}
-        <View style={[styles.videoContainer, { height: Math.min(displayHeight, 500) }]}>
+        <View
+          style={[styles.videoContainer, { height: containerHeight }]}
+          onLayout={(e) => {
+            const { width, height } = e.nativeEvent.layout;
+            if (width > 0 && height > 0) {
+              setVideoLayout({ width, height });
+            }
+          }}
+        >
           <VideoView
             player={player}
             style={styles.video}
             contentFit="contain"
             nativeControls={false}
-            onLayout={(e) => {
-              const { width, height } = e.nativeEvent.layout;
-              setVideoLayout({ width, height });
-            }}
           />
 
           {/* Skeleton overlay */}

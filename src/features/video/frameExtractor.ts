@@ -54,8 +54,22 @@ async function extractFramesWeb(
     });
 
     const canvas = document.createElement('canvas');
-    const width = Math.min(video.videoWidth || 640, 640);
-    const height = Math.min(video.videoHeight || 480, 480);
+    const vWidth = video.videoWidth || 640;
+    const vHeight = video.videoHeight || 480;
+    const maxDim = 640;
+    let width = vWidth;
+    let height = vHeight;
+    if (width > height) {
+      if (width > maxDim) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
+      }
+    } else {
+      if (height > maxDim) {
+        width = Math.round((width * maxDim) / height);
+        height = maxDim;
+      }
+    }
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');

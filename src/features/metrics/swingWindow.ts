@@ -48,6 +48,10 @@ export function extractSwingWindow(
     (e) => e.event === 'IMPACT_PROXY' && e.frameIndex !== null && e.status === 'RELIABLE',
   );
 
+  const topEvent = events.events.find(
+    (e) => e.event === 'TOP' && e.frameIndex !== null && e.status === 'RELIABLE',
+  );
+
   // If no address event is found, we cannot reliably bound the start of the swing
   if (!addressEvent || addressEvent.frameIndex === null) {
     return {
@@ -59,15 +63,32 @@ export function extractSwingWindow(
     };
   }
 
+  // If neither FINISH, IMPACT, nor TOP is found, swing end is undefined
+  if (
+    (!finishEvent || finishEvent.frameIndex === null) &&
+    (!impactEvent || impactEvent.frameIndex === null) &&
+    (!topEvent || topEvent.frameIndex === null)
+  ) {
+    return {
+      hasEvents: false,
+      addressFrameIndex: addressEvent.frameIndex,
+      finishFrameIndex: null,
+      windowFrames: timeline.frames,
+      reliableWindowFrames: timeline.reliableFrames,
+    };
+  }
+
   // Start frame: address frame with 1-frame pre-buffer if available
   const startIdx = Math.max(0, addressEvent.frameIndex - 1);
 
-  // End frame: finish frame with post-buffer, or impact + 15 frames, or end of timeline
+  // End frame: finish frame with post-buffer, or impact + 15 frames, or top + 30 frames
   let endIdx = timeline.frames.length - 1;
   if (finishEvent && finishEvent.frameIndex !== null) {
     endIdx = Math.min(timeline.frames.length - 1, finishEvent.frameIndex + 1);
   } else if (impactEvent && impactEvent.frameIndex !== null) {
     endIdx = Math.min(timeline.frames.length - 1, impactEvent.frameIndex + 15);
+  } else if (topEvent && topEvent.frameIndex !== null) {
+    endIdx = Math.min(timeline.frames.length - 1, topEvent.frameIndex + 30);
   }
 
   if (startIdx >= endIdx) {
