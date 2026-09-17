@@ -5,6 +5,7 @@
  * Video selection and metadata extraction.
  */
 
+import { Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { VideoSource, VideoMetadata, VideoValidation } from '../../types/video';
 import { Logger } from '../../utils/logger';
@@ -13,6 +14,48 @@ import {
   MAX_ABSOLUTE_DURATION,
   MIN_DURATION,
 } from '../../constants/config';
+
+/**
+ * Safely normalize video duration across Web and Native platforms.
+ * - On Web: expo-image-picker returns duration in seconds (via HTML5 Video.duration).
+ * - On Native: expo-image-picker returns duration in milliseconds (via MediaMetadataRetriever / AVAsset).
+ */
+export function normalizeDuration(rawDuration: number | null | undefined): number {
+  if (!rawDuration || !Number.isFinite(rawDuration) || rawDuration <= 0) {
+    return 0;
+  }
+  if (Platform.OS === 'web') {
+    return rawDuration;
+  }
+  // On iOS / Android native modules, expo-image-picker returns milliseconds.
+  // Any duration > 300 is definitely milliseconds (300s = 5 minutes).
+  return rawDuration > 300 ? rawDuration / 1000 : rawDuration;
+}
+
+/**
+ * Web-specific fallback to extract duration using an in-memory HTML5 video element.
+ */
+async function getWebVideoDuration(uri: string): Promise<number> {
+  if (typeof document === 'undefined') return 0;
+  return new Promise((resolve) => {
+    try {
+      const video = document.createElement('video');
+      video.src = uri;
+      video.preload = 'metadata';
+      const timeout = setTimeout(() => resolve(0), 3000);
+      video.onloadedmetadata = () => {
+        clearTimeout(timeout);
+        resolve(video.duration || 0);
+      };
+      video.onerror = () => {
+        clearTimeout(timeout);
+        resolve(0);
+      };
+    } catch {
+      resolve(0);
+    }
+  });
+}
 
 /**
  * Open the device media library and let the user select a video.
@@ -49,12 +92,16 @@ export async function selectVideo(): Promise<VideoSource | null> {
       duration: asset.duration,
     });
 
-    // Handle duration=0 or null/undefined from ImagePicker
-    let durationSeconds = (asset.duration || 0) / 1000;
+    // Normalize duration according to platform
+    let durationSeconds = normalizeDuration(asset.duration);
     if (durationSeconds <= 0) {
-      Logger.video.info('Selected video duration is 0 or null. Attempting fallback duration extraction via expo-video...');
+      Logger.video.info('Selected video duration is 0 or null. Attempting fallback duration extraction...');
       try {
-        durationSeconds = await getFallbackDuration(asset.uri);
+        if (Platform.OS === 'web') {
+          durationSeconds = await getWebVideoDuration(asset.uri);
+        } else {
+          durationSeconds = await getFallbackDuration(asset.uri);
+        }
       } catch (err) {
         Logger.video.error('Fallback duration extraction error', { error: String(err) });
       }
@@ -74,7 +121,7 @@ export async function selectVideo(): Promise<VideoSource | null> {
 
 /**
  * Asynchronously retrieve video duration using expo-video player
- * as a fallback if ImagePicker returns 0 or null duration.
+ * as a fallback if ImagePicker returns 0 or null duration on native platforms.
  */
 async function getFallbackDuration(uri: string): Promise<number> {
   return new Promise((resolve) => {
@@ -137,12 +184,16 @@ async function getFallbackDuration(uri: string): Promise<number> {
 }
 
 /** Build VideoMetadata from an ImagePicker asset. */
-function buildMetadata(asset: ImagePicker.ImagePickerAsset, durationOverride?: number): VideoMetadata {
+export function buildMetadata(asset: ImagePicker.ImagePickerAsset, durationOverride?: number): VideoMetadata {
   const width = asset.width || 0;
   const height = asset.height || 0;
-  const duration = durationOverride !== undefined && durationOverride > 0
-    ? durationOverride
-    : (asset.duration ? asset.duration / 1000 : 0.0);
+  let duration = 0;
+
+  if (durationOverride !== undefined && durationOverride > 0) {
+    duration = durationOverride;
+  } else if (asset.duration && asset.duration > 0) {
+    duration = normalizeDuration(asset.duration);
+  }
 
   return {
     duration,
@@ -164,7 +215,9 @@ export function validateVideo(metadata: VideoMetadata): VideoValidation {
   const errors: string[] = [];
 
   // Duration checks
-  if (metadata.duration < MIN_DURATION) {
+  if (metadata.duration <= 0) {
+    errors.push('Could not determine video duration. Please ensure the video format is supported (e.g. MP4, MOV).');
+  } else if (metadata.duration < MIN_DURATION) {
     errors.push(`Video is too short (${metadata.duration.toFixed(1)}s). Minimum is ${MIN_DURATION}s.`);
   }
 
