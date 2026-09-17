@@ -156,6 +156,25 @@ describe('Hand Depth Metric', () => {
       expect(result.value).not.toBeNull();
       expect(result.value!).toBeCloseTo(0, 1);
     });
+
+    it('abstains with NOT_RELIABLE when events are provided but ADDRESS is missing (Truth Gate)', () => {
+      const frames = createStationarySequence(20);
+      const timeline = makeTimeline(frames);
+      const eventsWithoutAddress = {
+        events: [
+          { event: 'TAKEAWAY' as const, timestampMs: 100, frameIndex: 1, confidence: 0.9, status: 'RELIABLE' as const, signals: {} },
+        ],
+        detectedCount: 1,
+        reliableCount: 1,
+        temporalOrderValid: true,
+        warnings: [],
+      };
+
+      const result = handDepthMetric.calculate(timeline, makeConfig('DTL'), eventsWithoutAddress);
+      expect(result.status).toBe('NOT_RELIABLE');
+      expect(result.value).toBeNull();
+      expect(result.warnings.some(w => w.includes('ADDRESS'))).toBe(true);
+    });
   });
 
   describe('metadata', () => {

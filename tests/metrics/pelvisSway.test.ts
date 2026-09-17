@@ -141,6 +141,25 @@ describe('Pelvis Sway Metric', () => {
       const withEvents = pelvisSwayMetric.calculate(timeline, makeConfig('FO'), events);
       expect(withEvents.value!).toBeLessThan(0.3); // confined to swing sway
     });
+
+    it('abstains with NOT_RELIABLE when events are provided but ADDRESS is missing (Truth Gate)', () => {
+      const frames = createStationarySequence(20);
+      const timeline = makeTimeline(frames);
+      const eventsWithoutAddress: SwingEventResult = {
+        events: [
+          { event: 'TAKEAWAY', timestampMs: 100, frameIndex: 1, confidence: 0.9, status: 'RELIABLE', signals: {} },
+        ],
+        detectedCount: 1,
+        reliableCount: 1,
+        temporalOrderValid: true,
+        warnings: [],
+      };
+
+      const result = pelvisSwayMetric.calculate(timeline, makeConfig('FO'), eventsWithoutAddress);
+      expect(result.status).toBe('NOT_RELIABLE');
+      expect(result.value).toBeNull();
+      expect(result.warnings.some(w => w.includes('ADDRESS'))).toBe(true);
+    });
   });
 
   describe('view restriction', () => {

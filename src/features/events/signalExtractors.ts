@@ -188,3 +188,35 @@ export function extractWristHeight(timeline: PoseTimeline): number[] {
     return shoulderY - wristY;
   });
 }
+
+// ─── Signal Smoothing ───────────────────────────────────────────────
+
+/**
+ * Smooth a 1D numerical signal using a moving average window, preserving NaNs.
+ */
+export function smoothSignal(signal: readonly number[], windowSize: number = 3): number[] {
+  if (windowSize <= 1 || signal.length <= 1) return [...signal];
+  const half = Math.floor(windowSize / 2);
+  const result: number[] = [];
+
+  for (let i = 0; i < signal.length; i++) {
+    if (isNaN(signal[i])) {
+      result.push(NaN);
+      continue;
+    }
+    let sum = 0;
+    let count = 0;
+    const start = Math.max(0, i - half);
+    const end = Math.min(signal.length - 1, i + half);
+
+    for (let j = start; j <= end; j++) {
+      if (!isNaN(signal[j])) {
+        sum += signal[j];
+        count++;
+      }
+    }
+    result.push(count > 0 ? sum / count : NaN);
+  }
+
+  return result;
+}

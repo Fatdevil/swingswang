@@ -6,7 +6,7 @@
  */
 
 import { LandmarkID, SHOULDER_LANDMARKS, HIP_LANDMARKS } from '../../types/landmarks';
-import { MetricResult, reliabilityFromConfidence, notReliableResult } from '../../types/metrics';
+import { MetricResult, ReliabilityStatus, reliabilityFromConfidence, notReliableResult } from '../../types/metrics';
 import { PoseTimeline } from '../timeline/PoseTimeline';
 import { calculateConfidence } from '../confidence/ConfidenceEngine';
 import { SwingEventResult } from '../events/types';
@@ -24,13 +24,27 @@ export function calculateTorsoAngleChange(
   events?: SwingEventResult,
 ): MetricResult {
   const windowInfo = extractSwingWindow(timeline, events);
+
+  // Truth Gate: If events were supplied by the pipeline but no reliable ADDRESS/swing window was detected, abstain.
+  if (events !== undefined && (!windowInfo.hasEvents || windowInfo.addressFrameIndex === null)) {
+    Logger.metrics.warn('Torso angle change abstained: missing reliable address position', {
+      eventsSupplied: true,
+      hasEvents: windowInfo.hasEvents,
+    });
+    return notReliableResult(
+      METRIC_ID,
+      METRIC_NAME,
+      'Ryggradsvinkel (Spine Tilt Change) kräver en verifierad adressposition (ADDRESS) för att mäta vinkeländring.',
+    );
+  }
+
   const reliableFrames = windowInfo.reliableWindowFrames;
 
   if (reliableFrames.length < 3) {
     return notReliableResult(METRIC_ID, METRIC_NAME, 'Not enough reliable frames for torso angle analysis.');
   }
 
-  // Extract torso angles
+  // Extract torso angles (hip midpoint to shoulder midpoint)
   const angles: number[] = [];
   const shoulderWidths: number[] = [];
 
@@ -94,16 +108,28 @@ export function calculateTorsoAngleChange(
     addressAngle = angles.slice(0, refCount).reduce((s, a) => s + a, 0) / refCount;
   }
 
-  // Maximum absolute change from address
+  // Maximum absolute change from address with circular wrapping in [-180, 180]
   let maxChange = 0;
   for (const angle of angles) {
-    const change = Math.abs(angle - addressAngle);
+    let diff = (angle - addressAngle + 180) % 360;
+    if (diff < 0) diff += 360;
+    diff -= 180;
+    const change = Math.abs(diff);
     if (change > maxChange) maxChange = change;
   }
 
   // Confidence
   const factors = calculateConfidence(timeline, [...SHOULDER_LANDMARKS, ...HIP_LANDMARKS], shoulderWidths);
   const confidence = factors.composite;
+
+  const warnings = [...factors.warnings];
+  let status = reliabilityFromConfidence(confidence);
+  if (maxChange > 65) {
+    warnings.push('Beräknad ryggradslutning (>65°) överstiger fysiologiskt normalt svingomfång och bör granskas.');
+    if (status === ReliabilityStatus.Reliable) {
+      status = ReliabilityStatus.Marginal;
+    }
+  }
 
   Logger.metrics.info('Torso angle change calculated', {
     addressAngle: roundTo(addressAngle, 2),
@@ -119,9 +145,9 @@ export function calculateTorsoAngleChange(
     normalizedValue: roundTo(maxChange, 2),
     unit: 'degrees',
     confidence,
-    status: reliabilityFromConfidence(confidence),
+    status,
     framesUsed: angles.length,
-    warnings: factors.warnings,
+    warnings,
     calculationExplanation:
       `2D spinal tilt angle measured from hip midpoint to shoulder midpoint relative to vertical. ` +
       `Address angle: ${roundTo(addressAngle, 1)}°. Maximum change: ${roundTo(maxChange, 1)}°. ` +

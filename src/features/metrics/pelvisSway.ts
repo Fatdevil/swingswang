@@ -58,6 +58,22 @@ function calculatePelvisSway(
   }
 
   const windowInfo = extractSwingWindow(timeline, events);
+
+  // Truth Gate: If events were supplied by the pipeline but no reliable ADDRESS/swing window was detected, abstain.
+  if (events !== undefined && (!windowInfo.hasEvents || windowInfo.addressFrameIndex === null)) {
+    Logger.metrics.warn('Pelvis sway abstained: missing reliable address position', {
+      eventsSupplied: true,
+      hasEvents: windowInfo.hasEvents,
+    });
+    return notReliableResultV1(
+      METRIC_ID,
+      METRIC_NAME,
+      'Pelvis sway kräver en verifierad adressposition (ADDRESS) för att etablera referensläge.',
+      'FO',
+      METRIC_VERSION,
+    );
+  }
+
   const reliableFrames = windowInfo.reliableWindowFrames;
 
   if (reliableFrames.length < MIN_FRAMES) {

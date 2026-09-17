@@ -170,6 +170,25 @@ describe('Knee Flex Metric', () => {
       expect(result.value).toBeNull();
     });
 
+    it('abstains with NOT_RELIABLE when events are provided but ADDRESS is missing (Truth Gate)', () => {
+      const frames = createStationarySequence(20);
+      const timeline = makeTimeline(frames);
+      const eventsWithoutAddress = {
+        events: [
+          { event: 'TAKEAWAY' as const, timestampMs: 100, frameIndex: 1, confidence: 0.9, status: 'RELIABLE' as const, signals: {} },
+        ],
+        detectedCount: 1,
+        reliableCount: 1,
+        temporalOrderValid: true,
+        warnings: [],
+      };
+
+      const result = kneeFlexMetric.calculate(timeline, makeConfig(), eventsWithoutAddress);
+      expect(result.status).toBe('NOT_RELIABLE');
+      expect(result.value).toBeNull();
+      expect(result.warnings.some(w => w.includes('ADDRESS'))).toBe(true);
+    });
+
     it('handles missing hip landmarks', () => {
       const frames = [];
       for (let i = 0; i < 20; i++) {

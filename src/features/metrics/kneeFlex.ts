@@ -22,6 +22,7 @@ import {
   getLeadLandmarkId,
   getTrailLandmarkId,
 } from '@/utils/handedness';
+import { extractSwingWindow, getAddressReferenceFrames } from './swingWindow';
 import { roundTo } from '@/utils/math';
 import { Logger } from '@/utils/logger';
 import {
@@ -79,7 +80,24 @@ function calculateKneeFlex(
   config: SwingConfig,
   events?: SwingEventResult,
 ): MetricResultV1 {
-  const reliableFrames = timeline.reliableFrames;
+  const windowInfo = extractSwingWindow(timeline, events);
+
+  // Truth Gate: If events were supplied by the pipeline but no reliable ADDRESS/swing window was detected, abstain.
+  if (events !== undefined && (!windowInfo.hasEvents || windowInfo.addressFrameIndex === null)) {
+    Logger.metrics.warn('Knee flex abstained: missing reliable address position', {
+      eventsSupplied: true,
+      hasEvents: windowInfo.hasEvents,
+    });
+    return notReliableResultV1(
+      METRIC_ID,
+      METRIC_NAME,
+      'Knävinkel (Knee Flexion) kräver en verifierad adressposition (ADDRESS) för att mäta förändring från uppställningen.',
+      'BOTH',
+      METRIC_VERSION,
+    );
+  }
+
+  const reliableFrames = windowInfo.reliableWindowFrames;
 
   if (reliableFrames.length < MIN_FRAMES) {
     return notReliableResultV1(
@@ -121,7 +139,7 @@ function calculateKneeFlex(
     );
   }
 
-  // Address angle (first ~10% of frames)
+  // Address angle (first ~10% of frames or reference around address)
   const leadRefCount = Math.max(
     MIN_REFERENCE_FRAMES,
     Math.min(MAX_REFERENCE_FRAMES, Math.floor(leadAngles.length * REFERENCE_FRAME_RATIO)),
@@ -131,13 +149,33 @@ function calculateKneeFlex(
     Math.min(MAX_REFERENCE_FRAMES, Math.floor(trailAngles.length * REFERENCE_FRAME_RATIO)),
   );
 
-  const leadAddressAngle = leadAngles.length >= leadRefCount
-    ? leadAngles.slice(0, leadRefCount).reduce((s, a) => s + a, 0) / leadRefCount
-    : null;
+  let leadAddressAngle: number | null = null;
+  let trailAddressAngle: number | null = null;
 
-  const trailAddressAngle = trailAngles.length >= trailRefCount
-    ? trailAngles.slice(0, trailRefCount).reduce((s, a) => s + a, 0) / trailRefCount
-    : null;
+  if (windowInfo.hasEvents && windowInfo.addressFrameIndex !== null) {
+    const addressFrames = getAddressReferenceFrames(reliableFrames, windowInfo.addressFrameIndex, leadRefCount);
+    const leadAddressAngles: number[] = [];
+    const trailAddressAngles: number[] = [];
+    for (const frame of addressFrames) {
+      const la = getKneeAngle(frame.landmarks, leadHipId, leadKneeId, leadAnkleId);
+      const ta = getKneeAngle(frame.landmarks, trailHipId, trailKneeId, trailAnkleId);
+      if (la !== null) leadAddressAngles.push(la);
+      if (ta !== null) trailAddressAngles.push(ta);
+    }
+    if (leadAddressAngles.length > 0) {
+      leadAddressAngle = leadAddressAngles.reduce((s, a) => s + a, 0) / leadAddressAngles.length;
+    }
+    if (trailAddressAngles.length > 0) {
+      trailAddressAngle = trailAddressAngles.reduce((s, a) => s + a, 0) / trailAddressAngles.length;
+    }
+  }
+
+  if (leadAddressAngle === null && leadAngles.length >= leadRefCount) {
+    leadAddressAngle = leadAngles.slice(0, leadRefCount).reduce((s, a) => s + a, 0) / leadRefCount;
+  }
+  if (trailAddressAngle === null && trailAngles.length >= trailRefCount) {
+    trailAddressAngle = trailAngles.slice(0, trailRefCount).reduce((s, a) => s + a, 0) / trailRefCount;
+  }
 
   // Max angle change from address
   let leadMaxChange = 0;

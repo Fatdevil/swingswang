@@ -31,6 +31,20 @@ export function calculateHeadMovement(
   events?: SwingEventResult,
 ): MetricResult {
   const windowInfo = extractSwingWindow(timeline, events);
+
+  // Truth Gate: If events were supplied by the pipeline but no reliable ADDRESS/swing window was detected, abstain.
+  if (events !== undefined && (!windowInfo.hasEvents || windowInfo.addressFrameIndex === null)) {
+    Logger.metrics.warn('Head movement abstained: missing reliable address position', {
+      eventsSupplied: true,
+      hasEvents: windowInfo.hasEvents,
+    });
+    return notReliableResult(
+      METRIC_ID,
+      METRIC_NAME,
+      'Huvudrörelse (Head Movement) kräver en verifierad adressposition (ADDRESS) för att etablera referensläge.',
+    );
+  }
+
   const reliableFrames = windowInfo.reliableWindowFrames;
 
   if (reliableFrames.length < 3) {

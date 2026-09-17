@@ -6,6 +6,10 @@
  */
 
 import { angleFromVertical } from '../src/utils/geometry';
+import { calculateTorsoAngleChange } from '../src/features/metrics/torsoAngle';
+import { PoseTimeline } from '../src/features/timeline/PoseTimeline';
+import { SwingEventResult } from '../src/features/events/types';
+import { createStationarySequence } from './helpers/poseFixtures';
 
 // ─── Torso angle calculation ────────────────────────────────────────
 
@@ -84,5 +88,26 @@ describe('Torso angle — edge cases', () => {
     const angle = angleFromVertical(hip, shoulder);
     // Should still compute without NaN
     expect(isNaN(angle)).toBe(false);
+  });
+});
+
+describe('Torso angle — Truth Gate', () => {
+  it('abstains with notReliable when events are supplied without ADDRESS', () => {
+    const frames = createStationarySequence(20);
+    const timeline = new PoseTimeline(frames, frames.length, 1000, 15);
+    const eventsWithoutAddress: SwingEventResult = {
+      events: [
+        { event: 'TAKEAWAY', timestampMs: 100, frameIndex: 1, confidence: 0.9, status: 'RELIABLE', signals: {} },
+      ],
+      detectedCount: 1,
+      reliableCount: 1,
+      temporalOrderValid: true,
+      warnings: [],
+    };
+
+    const result = calculateTorsoAngleChange(timeline, eventsWithoutAddress);
+    expect(result.rawValue).toBeNull();
+    expect(result.status).toBe('notReliable');
+    expect(result.warnings.some(w => w.includes('ADDRESS'))).toBe(true);
   });
 });
