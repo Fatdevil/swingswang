@@ -81,17 +81,45 @@ async function extractFramesWeb(
       const timestamp = timestamps[i];
       try {
         await new Promise<void>((resolve) => {
-          const timeout = setTimeout(resolve, 500);
-          const onSeeked = () => {
-            clearTimeout(timeout);
+          let settled = false;
+          const cleanup = () => {
+            if (settled) return;
+            settled = true;
             video.removeEventListener('seeked', onSeeked);
+            clearTimeout(timeout);
+          };
+
+          const timeout = setTimeout(() => {
+            cleanup();
+            resolve();
+          }, 600);
+
+          const onSeeked = () => {
+            cleanup();
             resolve();
           };
+
           video.addEventListener('seeked', onSeeked);
           video.currentTime = timestamp;
         });
 
-        if (ctx) {
+        const timeDiff = Math.abs(video.currentTime - timestamp);
+        if (ctx && timeDiff <= 0.3) {
+          ctx.drawImage(video, 0, 0, width, height);
+          const dataUri = canvas.toDataURL('image/jpeg', 0.7);
+          frames.push({
+            imageUri: dataUri,
+            timestamp,
+            index: i,
+          });
+        } else if (frames.length > 0) {
+          // Re-use last extracted frame data URL if this specific seek timed out
+          frames.push({
+            imageUri: frames[frames.length - 1].imageUri,
+            timestamp,
+            index: i,
+          });
+        } else if (ctx) {
           ctx.drawImage(video, 0, 0, width, height);
           const dataUri = canvas.toDataURL('image/jpeg', 0.7);
           frames.push({

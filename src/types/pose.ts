@@ -9,8 +9,10 @@ import { LandmarkID, PoseLandmark } from './landmarks';
 
 /** A single pose detection result for one video frame. */
 export interface PoseFrame {
-  /** Timestamp in seconds from the start of the video. */
+  /** Media/file playback timestamp in seconds from the start of the video. */
   readonly timestamp: number;
+  /** Real-world elapsed seconds (scaled by slow-motion multiplier) for velocity/tempo. */
+  readonly realTimestamp?: number;
   /** Frame index in the analysis sequence (not video frame index). */
   readonly frameIndex: number;
   /** Detected landmarks, keyed by LandmarkID. Missing = not detected. */

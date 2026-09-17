@@ -77,22 +77,37 @@ function calculateTempo(
       const startTime = startEvent.timestampMs / 1000;
       const topTime = topEvent.timestampMs / 1000;
       const impactTime = impactEvent.timestampMs / 1000;
-      const backswingDuration = topTime - startTime;
-      const downswingDuration = impactTime - topTime;
 
-      if (backswingDuration > 0 && downswingDuration > 0) {
-        const ratio = backswingDuration / downswingDuration;
+      const startFrame = startEvent.frameIndex !== null && startEvent.frameIndex !== undefined
+        ? timeline.frames[startEvent.frameIndex]
+        : null;
+      const topFrame = topEvent.frameIndex !== null && topEvent.frameIndex !== undefined
+        ? timeline.frames[topEvent.frameIndex]
+        : null;
+      const impactFrame = impactEvent.frameIndex !== null && impactEvent.frameIndex !== undefined
+        ? timeline.frames[impactEvent.frameIndex]
+        : null;
+
+      const realStart = startFrame?.realTimestamp ?? startTime;
+      const realTop = topFrame?.realTimestamp ?? topTime;
+      const realImpact = impactFrame?.realTimestamp ?? impactTime;
+
+      const realBackswingDuration = realTop - realStart;
+      const realDownswingDuration = realImpact - realTop;
+
+      if (realBackswingDuration > 0 && realDownswingDuration > 0) {
+        const ratio = realBackswingDuration / realDownswingDuration;
         const confidence = calculateEventBasedConfidence(
           timeline,
           events,
-          backswingDuration,
-          downswingDuration,
+          realBackswingDuration,
+          realDownswingDuration,
         );
 
         Logger.metrics.info('Tempo calculated (event-based)', {
           startEvent: startEventType,
-          backswingMs: roundTo(backswingDuration * 1000, 0),
-          downswingMs: roundTo(downswingDuration * 1000, 0),
+          backswingMs: roundTo(realBackswingDuration * 1000, 0),
+          downswingMs: roundTo(realDownswingDuration * 1000, 0),
           ratio: roundTo(ratio, 2),
           confidence: roundTo(confidence, 3),
         });
@@ -117,8 +132,8 @@ function calculateTempo(
           evidence: {
             method: 'event_based',
             startEvent: startEventType,
-            backswingDurationMs: roundTo(backswingDuration * 1000, 0),
-            downswingDurationMs: roundTo(downswingDuration * 1000, 0),
+            backswingDurationMs: roundTo(realBackswingDuration * 1000, 0),
+            downswingDurationMs: roundTo(realDownswingDuration * 1000, 0),
             takeawayTimestamp: takeawayTime !== null ? roundTo(takeawayTime, 3) : null,
             addressTimestamp: addressTime !== null ? roundTo(addressTime, 3) : null,
             topTimestamp: roundTo(topTime, 3),
@@ -126,8 +141,8 @@ function calculateTempo(
           },
           calculationExplanation:
             `Tempo ratio calculated from swing events (${startEventType}→TOP / TOP→IMPACT): ` +
-            `backswing ${roundTo(backswingDuration * 1000, 0)}ms / ` +
-            `downswing ${roundTo(downswingDuration * 1000, 0)}ms = ` +
+            `backswing ${roundTo(realBackswingDuration * 1000, 0)}ms / ` +
+            `downswing ${roundTo(realDownswingDuration * 1000, 0)}ms = ` +
             `${roundTo(ratio, 2)}:1. Ideal is approximately 3:1.`,
           limitations: [
             'Event timestamps depend on event detection accuracy.',

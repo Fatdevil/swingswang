@@ -136,6 +136,7 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
 
       const videoPromise = cameraRef.current.recordAsync({
         maxDuration: RECORDING_DURATION_MS / 1000,
+        mute: true,
       });
 
       recordingStartTimeRef.current = Date.now();
@@ -182,6 +183,15 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
   };
 
   const stopRecording = () => {
+    // If in countdown, cancel countdown and reset state immediately (Finding 2)
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    setCountdown(null);
+    recordingStartedRef.current = false;
+    setIsRecording(false);
+
     if (cameraRef.current) {
       try {
         cameraRef.current.stopRecording();
@@ -189,6 +199,7 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
         Logger.video.warn('stopRecording failed or camera not ready', { error: String(e) });
       }
     }
+    resetCameraStates();
   };
 
   return {

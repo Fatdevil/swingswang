@@ -148,13 +148,20 @@ function NavigationLayout() {
             </Pressable>
  
             <Pressable
-              style={styles.menuItemDisabled}
+              onPress={() => {
+                setMenuVisible(false);
+                router.push('/camera');
+              }}
+              style={({ pressed }) => [
+                styles.menuItem,
+                pressed && styles.menuItemPressed
+              ]}
               accessibilityRole="button"
-              accessibilityLabel="Record Swing. Coming in Phase 1."
-              accessibilityState={{ disabled: true }}
+              accessibilityLabel="Record Swing"
+              accessibilityHint="Open camera to record a new swing video"
             >
-              <Ionicons name="videocam-outline" size={18} color={COLORS.textTertiary} />
-              <Text style={styles.menuItemTextDisabled}>Record Swing (Phase 1)</Text>
+              <Ionicons name="videocam-outline" size={18} color={COLORS.textPrimary} />
+              <Text style={styles.menuItemText}>Record Swing</Text>
             </Pressable>
           </View>
         </View>

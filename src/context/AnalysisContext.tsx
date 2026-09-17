@@ -132,8 +132,13 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         lastProcessedAnalysisId: null,
       };
     }
-    case 'LOAD_HISTORY':
-      return { ...state, history: action.payload, isHistoryLoaded: true };
+    case 'LOAD_HISTORY': {
+      // Merge persisted history with any in-memory results completed before load finished (Finding 6)
+      const mergedHistory = state.history.length > 0
+        ? [...action.payload, ...state.history]
+        : action.payload;
+      return { ...state, history: mergedHistory, isHistoryLoaded: true };
+    }
     case 'CLEAR_HISTORY':
       return { ...state, history: [] };
     case 'LOAD_STREAK':

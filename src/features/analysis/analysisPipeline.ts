@@ -162,18 +162,19 @@ export async function runAnalysisPipeline(
       : metadata.duration;
     const totalVideoFrames = Math.round(clipDuration * (metadata.frameRate || 30));
 
-    // Normalize timestamps to real elapsed seconds if video is in slow-motion
+    // Preserve media file timestamp for video player/overlay synchronization.
+    // Calculate realTimestamp for real-world elapsed time (slow-motion tempo and velocity).
     const speedMultiplier = metadata.slowMotion?.speedMultiplier ?? 1.0;
     const effectiveAnalysisFps = ANALYSIS_FRAME_RATE * speedMultiplier;
-    const normalizedPoseFrames = metadata.slowMotion?.isSlowMotion
-      ? poseFrames.map(f => ({
-          ...f,
-          timestamp: normalizeTimestampToRealSeconds(f.timestamp, metadata.slowMotion),
-        }))
-      : poseFrames;
+    const enrichedPoseFrames = poseFrames.map(f => ({
+      ...f,
+      realTimestamp: metadata.slowMotion?.isSlowMotion
+        ? normalizeTimestampToRealSeconds(f.timestamp, metadata.slowMotion)
+        : f.timestamp,
+    }));
 
-    // 4. Build raw timeline for quality checks
-    const rawTimeline = buildTimeline(normalizedPoseFrames, totalVideoFrames, pipelineTimer.elapsed(), effectiveAnalysisFps);
+    // 4. Build raw timeline for quality checks (using media timestamps for video player sync)
+    const rawTimeline = buildTimeline(enrichedPoseFrames, totalVideoFrames, pipelineTimer.elapsed(), ANALYSIS_FRAME_RATE);
 
     // 5. Evaluate video quality (Finding 4: Quality Gate)
     const qualStartMs = pipelineTimer.elapsed();
@@ -194,13 +195,13 @@ export async function runAnalysisPipeline(
     // 6. Run pose stabilization
     const stabStartMs = pipelineTimer.elapsed();
     const stabilizationTimer = new PerformanceTimer('stage.stabilization');
-    const stabilizationResult = stabilizePoseTimeline(normalizedPoseFrames);
+    const stabilizationResult = stabilizePoseTimeline(enrichedPoseFrames);
     const stabilizedFrames = stabilizationResult.frames;
     const stabilizedTimeline = buildTimeline(
       stabilizedFrames,
       totalVideoFrames,
       pipelineTimer.elapsed(),
-      effectiveAnalysisFps
+      ANALYSIS_FRAME_RATE
     );
     const stabDurationMs = stabilizationTimer.stop();
     stageTimings['stabilization'] = stabDurationMs;
@@ -456,17 +457,25 @@ export async function runAnalysisPipeline(
     throw error;
   } finally {
     engine.dispose();
-    // Clean up temporary extracted frames to prevent storage leaks (Finding 7: use legacy API consistently)
+    // Clean up temporary extracted frames to prevent storage leaks (Finding 3: protect source video)
     if (frames && frames.length > 0) {
       try {
         const { deleteAsync } = require('expo-file-system/legacy');
         if (deleteAsync) {
           for (const frame of frames) {
-            if (frame.imageUri) {
+            const uri = frame.imageUri;
+            // Never attempt to delete the user's source video, data URIs, or blob URIs
+            if (
+              uri &&
+              uri !== videoUri &&
+              !uri.startsWith('data:') &&
+              !uri.startsWith('blob:') &&
+              uri.startsWith('file://')
+            ) {
               try {
-                await deleteAsync(frame.imageUri, { idempotent: true });
+                await deleteAsync(uri, { idempotent: true });
               } catch (e) {
-                Logger.video.warn(`Failed to clean up temporary frame: ${frame.imageUri}`, { error: String(e) });
+                Logger.video.warn(`Failed to clean up temporary frame: ${uri}`, { error: String(e) });
               }
             }
           }
