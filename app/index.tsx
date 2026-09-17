@@ -229,6 +229,7 @@ export default function HomeScreen() {
 
               {/* Swing Trimmer Card */}
               <SwingTrimmerCard
+                videoUri={videoSource.uri}
                 duration={videoSource.metadata.duration}
                 slowMotion={videoSource.metadata.slowMotion}
                 startTime={trimRange?.startTime ?? 0}

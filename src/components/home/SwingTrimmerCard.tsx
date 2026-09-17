@@ -2,19 +2,19 @@
  * SwingTrimmerCard.tsx
  * SwingSwang
  *
- * Interactive trimmer card for selecting the swing portion of a video.
- * Crucial for slow-motion and long gallery videos to avoid processing
- * dozens of idle seconds.
+ * Interactive trimmer card with embedded video preview for selecting
+ * the swing portion of a video.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/Card';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY, BORDER_RADIUS } from '@/constants/theme';
 import { SlowMotionInfo } from '@/types/video';
 
 export interface SwingTrimmerCardProps {
+  videoUri?: string;
   duration: number; // Video duration in seconds
   slowMotion?: SlowMotionInfo;
   startTime: number;
@@ -24,6 +24,7 @@ export interface SwingTrimmerCardProps {
 }
 
 export function SwingTrimmerCard({
+  videoUri,
   duration,
   slowMotion,
   startTime,
@@ -35,8 +36,12 @@ export function SwingTrimmerCard({
   const currentStart = Math.max(0, Math.min(startTime, safeDuration));
   const currentEnd = Math.max(currentStart + 0.5, Math.min(endTime, safeDuration));
 
+  const [currentVideoTime, setCurrentVideoTime] = useState<number>(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
   const speedMultiplier = slowMotion?.speedMultiplier ?? 1.0;
   const isSlowMo = !!slowMotion?.isSlowMotion;
+  const captureFps = slowMotion?.captureFps ?? (isSlowMo ? 240 : 30);
 
   const clipDuration = Math.max(0.1, currentEnd - currentStart);
   const realDuration = clipDuration / speedMultiplier;
@@ -55,6 +60,18 @@ export function SwingTrimmerCard({
     if (disabled) return;
     const nextEnd = Math.min(safeDuration, Math.max(currentEnd + delta, currentStart + 0.5));
     onRangeChange({ startTime: currentStart, endTime: Number(nextEnd.toFixed(1)) });
+  };
+
+  const setStartToCurrent = () => {
+    if (disabled) return;
+    const s = Math.max(0, Math.min(currentVideoTime, currentEnd - 0.5));
+    onRangeChange({ startTime: Number(s.toFixed(1)), endTime: currentEnd });
+  };
+
+  const setEndToCurrent = () => {
+    if (disabled) return;
+    const e = Math.min(safeDuration, Math.max(currentVideoTime, currentStart + 0.5));
+    onRangeChange({ startTime: currentStart, endTime: Number(e.toFixed(1)) });
   };
 
   const setFullRange = () => {
@@ -81,16 +98,67 @@ export function SwingTrimmerCard({
   };
 
   return (
-    <Card title="Swing Trimmer" style={styles.card}>
+    <Card title="Swing Trimmer & Förhandsgranskning" style={styles.card}>
+      {/* Optional explanation callout */}
+      <View style={styles.optionalBanner}>
+        <Ionicons name="information-circle-outline" size={16} color="#3B82F6" />
+        <Text style={styles.optionalBannerText}>
+          <Text style={styles.boldText}>Valfritt steg:</Text> Du behöver inte trimma om du inte vill. Klicka direkt på <Text style={styles.boldText}>PROCESS VIDEO</Text> nedan så analyserar systemet hela videon automatiskt. Använd spelaren här om du vill korta ner analysen till just svingögonblicket.
+        </Text>
+      </View>
+
+      {/* Embedded Video Preview on Web */}
+      {Platform.OS === 'web' && videoUri && (
+        <View style={styles.videoPlayerBox}>
+          <video
+            ref={videoRef}
+            src={videoUri}
+            controls
+            playsInline
+            style={{
+              width: '100%',
+              maxHeight: 260,
+              backgroundColor: '#000000',
+              borderRadius: 8,
+            }}
+            onTimeUpdate={(e) => setCurrentVideoTime(e.currentTarget.currentTime)}
+          />
+          <View style={styles.videoBar}>
+            <Text style={styles.videoPosText}>
+              Spelare: <Text style={styles.boldText}>{currentVideoTime.toFixed(1)}s</Text>
+              {isSlowMo ? ` (~${(currentVideoTime / speedMultiplier).toFixed(2)}s verklig)` : ''}
+            </Text>
+            <View style={styles.markerGroup}>
+              <Pressable
+                style={styles.markerBtn}
+                onPress={setStartToCurrent}
+                disabled={disabled}
+              >
+                <Ionicons name="flag-outline" size={13} color="#FFFFFF" />
+                <Text style={styles.markerBtnText}>Sätt som Start ({currentVideoTime.toFixed(1)}s)</Text>
+              </Pressable>
+              <Pressable
+                style={styles.markerBtn}
+                onPress={setEndToCurrent}
+                disabled={disabled}
+              >
+                <Ionicons name="golf-outline" size={13} color="#FFFFFF" />
+                <Text style={styles.markerBtnText}>Sätt som Slut ({currentVideoTime.toFixed(1)}s)</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
+
       {isSlowMo && (
         <View style={styles.slowMoBanner}>
           <Ionicons name="speedometer-outline" size={18} color="#10B981" />
           <View style={styles.slowMoTextContainer}>
             <Text style={styles.slowMoTitle}>
-              Slow-Motion {slowMotion.estimatedCaptureFps} FPS ({slowMotion.speedMultiplier}x)
+              Slow-Motion {captureFps} FPS ({speedMultiplier}x)
             </Text>
             <Text style={styles.slowMoSubtitle}>
-              Videon spelas upp långsamt. Klipp gärna till svingsekvensen för snabbare och mer exakt analys.
+              Videon är inspelad i slow-motion. En sving på ~3 verkliga sekunder tar ca 24 sekunder i filen.
             </Text>
           </View>
         </View>
@@ -109,7 +177,7 @@ export function SwingTrimmerCard({
         <View style={styles.timelineLabels}>
           <Text style={styles.timeLabel}>0.0s</Text>
           <Text style={styles.timeLabelMid}>
-            Vald: {clipDuration.toFixed(1)}s ({estimatedFrames} rutor)
+            Valt intervall: {clipDuration.toFixed(1)}s ({estimatedFrames} rutor)
           </Text>
           <Text style={styles.timeLabel}>{safeDuration.toFixed(1)}s</Text>
         </View>
@@ -282,6 +350,66 @@ export function SwingTrimmerCard({
 const styles = StyleSheet.create({
   card: {
     marginVertical: SPACING.sm,
+  },
+  optionalBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderColor: 'rgba(59, 130, 246, 0.3)',
+    borderWidth: 1,
+    borderRadius: BORDER_RADIUS.sm,
+    padding: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  optionalBannerText: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY,
+    flex: 1,
+    lineHeight: 16,
+  },
+  videoPlayerBox: {
+    marginBottom: SPACING.md,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: BORDER_RADIUS.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    padding: SPACING.xs,
+  },
+  videoBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: SPACING.xs,
+    paddingHorizontal: 4,
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  videoPosText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY,
+  },
+  markerGroup: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  markerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#2563EB',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  markerBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: FONT_WEIGHT.medium,
+    fontFamily: FONT_FAMILY,
   },
   slowMoBanner: {
     flexDirection: 'row',
