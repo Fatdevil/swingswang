@@ -6,7 +6,6 @@
  * Enables genuine pose tracking directly in the browser without requiring native mobile builds!
  */
 
-import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 import { PoseEngine } from './PoseEngine';
 import { PoseFrame } from '../../types/pose';
 import { MediaPipeModelVariant } from './types';
@@ -14,13 +13,20 @@ import { mapPoseOutputToFrame, RawKeypoint } from './landmarkMapper';
 import { MP_TO_COCO_MAPPING } from './MediaPipePoseAdapter';
 import { Logger, PerformanceTimer } from '@/utils/logger';
 
+interface WebPoseLandmarker {
+  detect(image: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement): {
+    landmarks?: Array<Array<{ x: number; y: number; z?: number; visibility?: number; presence?: number }>>;
+  };
+  close(): void;
+}
+
 export class MediaPipeWebPoseEngine implements PoseEngine {
   readonly name = 'MediaPipeWeb';
   readonly version = '0.10.18';
   readonly landmarkCount = 17; // COCO subset canonical
 
   private modelVariant: MediaPipeModelVariant;
-  private landmarker: PoseLandmarker | null = null;
+  private landmarker: WebPoseLandmarker | null = null;
   private initialized = false;
 
   constructor(modelVariant: MediaPipeModelVariant = 'lite') {
@@ -32,6 +38,15 @@ export class MediaPipeWebPoseEngine implements PoseEngine {
 
     const timer = new PerformanceTimer('MediaPipeWeb.init');
     Logger.pose.info(`Initializing MediaPipe WebAssembly PoseLandmarker (variant: ${this.modelVariant})...`);
+
+    if (typeof window === 'undefined') {
+      throw new Error('MediaPipeWebPoseEngine requires a browser environment with window/DOM support.');
+    }
+
+    // Load tasks-vision via browser dynamic import to avoid Metro's static AST transform crash
+    const dynamicImport = new Function('url', 'return import(url)');
+    const tasksVision = await dynamicImport('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/+esm');
+    const { FilesetResolver, PoseLandmarker } = tasksVision;
 
     const wasmPath = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm';
     const vision = await FilesetResolver.forVisionTasks(wasmPath);

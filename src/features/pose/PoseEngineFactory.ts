@@ -30,23 +30,19 @@ export function checkRealEngineAvailability(): PoseEngineAvailability {
       };
     }
 
-    try {
-      const tasksVision = require('@mediapipe/tasks-vision');
-      if (tasksVision && tasksVision.PoseLandmarker) {
-        return {
-          available: true,
-          provider: 'MEDIAPIPE_WEB',
-          reason: 'MediaPipe WebAssembly pose engine available in browser.',
-        };
-      }
-    } catch {
-      // not available
+    const hasWasm = typeof WebAssembly !== 'undefined';
+    if (hasWasm) {
+      return {
+        available: true,
+        provider: 'MEDIAPIPE_WEB',
+        reason: 'MediaPipe WebAssembly pose engine available in browser.',
+      };
     }
 
     return {
       available: false,
       provider: null,
-      reason: 'MediaPipe Tasks Vision is not available on web platform.',
+      reason: 'WebAssembly is not supported in this browser.',
     };
   }
 
