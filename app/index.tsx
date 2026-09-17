@@ -10,6 +10,7 @@ import React, { useEffect } from 'react';
 import {
   View,
   Text,
+  ScrollView,
   StyleSheet,
   SafeAreaView,
   AppState,
@@ -107,7 +108,11 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Friends System Top Card */}
         <FriendsCard
           myCode={myCode}
@@ -283,7 +288,7 @@ export default function HomeScreen() {
 
         {/* Footer */}
         <Text style={styles.version}>Phase 0 • v0.1.0</Text>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -293,22 +298,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.lg,
-    justifyContent: 'space-between',
+    paddingBottom: 120, // Breathing room above tab bar
+    gap: SPACING.md,
   },
   topRow: {
     flexDirection: 'row',
     gap: SPACING.md,
-    marginTop: SPACING.sm,
     width: '100%',
     height: 90,
+    flexShrink: 0,
   },
   actionSection: {
-    flex: 1,
-    justifyContent: 'center',
     width: '100%',
   },
   statusText: {
