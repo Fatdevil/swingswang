@@ -119,12 +119,12 @@ function NavigationLayout() {
         animationType="fade"
         onRequestClose={() => setMenuVisible(false)}
       >
-        <Pressable 
-          style={styles.modalOverlay} 
-          onPress={() => setMenuVisible(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Close menu"
-        >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setMenuVisible(false)}
+            accessibilityLabel="Close menu"
+          />
           <View style={styles.menuContainer}>
             <Text style={styles.menuTitle} accessibilityRole="header">SWING ACTION</Text>
             
@@ -156,7 +156,7 @@ function NavigationLayout() {
               <Text style={styles.menuItemTextDisabled}>Record Swing (Phase 1)</Text>
             </Pressable>
           </View>
-        </Pressable>
+        </View>
       </Modal>
     </View>
   );
