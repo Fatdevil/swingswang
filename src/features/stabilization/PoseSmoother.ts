@@ -5,10 +5,10 @@
  * Velocity-adaptive exponential moving average (EMA) smoother.
  *
  * For each landmark independently across time:
- *   alpha = max(minAlpha, baseFactor * exp(-velocityScale * velocity))
+ *   alpha = 1.0 - (1.0 - minFactor) * exp(-velocityScale * velocity)
  *
- * - High velocity → alpha → minAlpha (less smoothing, preserve fast motion)
- * - Low velocity  → alpha → baseFactor (more smoothing, reduce jitter)
+ * - High velocity → alpha → 1.0 (no smoothing, preserve fast motion)
+ * - Low velocity  → alpha → minFactor (heavy smoothing, reduce jitter)
  * - smoothed = alpha * current + (1 - alpha) * previousSmoothed
  *
  * This module has NO knowledge of swing phases — it operates purely on
@@ -57,8 +57,9 @@ export function smoothLandmarks(
       // Compute frame-to-frame velocity (normalized Euclidean distance).
       const velocity = normalizedDistance(prev, landmark);
 
-      // Adaptive alpha: high velocity → small alpha, low velocity → large alpha.
-      const alpha = Math.max(minFactor, baseFactor * Math.exp(-velocityScale * velocity));
+      // Adaptive alpha: high velocity → large alpha (near 1.0, trust current),
+      // low velocity → small alpha (near minFactor, trust previous).
+      const alpha = 1.0 - (1.0 - minFactor) * Math.exp(-velocityScale * velocity);
 
       // EMA: smoothed = alpha * current + (1 - alpha) * previousSmoothed
       const smoothed: PoseLandmark = {

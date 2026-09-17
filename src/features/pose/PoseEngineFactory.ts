@@ -11,16 +11,26 @@ import { PoseEngineConfig, PoseEngineAvailability } from './types';
 import { MockPoseEngine } from './MockPoseEngine';
 import { Logger } from '@/utils/logger';
 
+import { Platform } from 'react-native';
+
 /**
  * Check if a real pose engine is available and initialized in this build.
  * Returns availability info without creating an engine.
  *
- * Detection strategy: try to require the native module AND verify it exists.
+ * Detection strategy: verify platform is not web AND native module default export exists.
  */
 export function checkRealEngineAvailability(): PoseEngineAvailability {
+  if (Platform.OS === 'web') {
+    return {
+      available: false,
+      provider: null,
+      reason: 'Native MediaPipe pose engine is not available on web platform.',
+    };
+  }
+
   try {
     const mediapipe = require('../../../modules/mediapipe-pose');
-    if (mediapipe && typeof mediapipe.isAvailable === 'function') {
+    if (mediapipe && mediapipe.default != null) {
       return {
         available: true,
         provider: 'MEDIAPIPE',
@@ -30,7 +40,7 @@ export function checkRealEngineAvailability(): PoseEngineAvailability {
     return {
       available: false,
       provider: null,
-      reason: 'MediaPipe module loaded but isAvailable not found.',
+      reason: 'MediaPipe native module not linked in this build.',
     };
   } catch {
     return {

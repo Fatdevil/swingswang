@@ -137,13 +137,13 @@ describe('PoseSmoother – smoothLandmarks', () => {
     const slowExpected = BASE * 0.501 + (1 - BASE) * 0.500; // ≈ 0.5003
     expect(slowNose.x).toBeCloseTo(slowExpected, 3);
 
-    // For fast motion, alpha should be much smaller (near MIN_FACTOR),
-    // so the smoothed value should be pulled strongly toward previous.
+    // For fast motion, alpha should be significantly larger (responsive),
+    // so the smoothed value tracks the new value more closely to prevent lag.
     const fastNose = fastResult[1].landmarks.get(LandmarkID.nose)!;
-    // With velocity ≈ 0.4, alpha = max(0.05, 0.3 * exp(-2 * 0.4)) ≈ max(0.05, 0.135) = 0.135
-    // smoothed = 0.135 * 0.70 + 0.865 * 0.30 = 0.0945 + 0.2595 = 0.354
-    expect(fastNose.x).toBeGreaterThan(0.30);
-    expect(fastNose.x).toBeLessThan(0.50); // Definitely not at full new value
+    // With velocity ≈ 0.4, alpha = 1.0 - (1 - 0.05) * exp(-2 * 0.4) ≈ 0.573
+    // smoothed = 0.573 * 0.70 + 0.427 * 0.30 ≈ 0.529
+    expect(fastNose.x).toBeGreaterThan(0.50);
+    expect(fastNose.x).toBeLessThan(0.70);
   });
 
   it('handles empty frame array', () => {

@@ -189,7 +189,7 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
           const frame = timeline.frames[midIdx];
           const avgVel = this.averageInRange(velocities, runStart, i);
           const clarity = 1 - (avgVel / stillnessVelocityThreshold);
-          return reliableEvent('ADDRESS', midIdx, frame.timestamp * 1000, Math.max(0.5, clarity), {
+          return reliableEvent('ADDRESS', midIdx, frame.timestamp * 1000, clarity, {
             avgVelocity: avgVel,
             stillFrames: consecutiveStill,
           });
@@ -203,7 +203,8 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
     if (frameCount === 1) {
       const v = velocities[0];
       if (!isNaN(v) && v <= stillnessVelocityThreshold) {
-        return reliableEvent('ADDRESS', 0, timeline.frames[0].timestamp * 1000, 0.5, {
+        const clarity = 1 - (v / stillnessVelocityThreshold);
+        return reliableEvent('ADDRESS', 0, timeline.frames[0].timestamp * 1000, clarity, {
           avgVelocity: v,
           stillFrames: 1,
         });
@@ -236,7 +237,7 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
       if (!isNaN(v) && !isNaN(d) && v > movementVelocityThreshold && d < 0) {
         const frame = timeline.frames[i];
         const confidence = Math.min(1, v / (movementVelocityThreshold * 3));
-        return reliableEvent('TAKEAWAY', i, frame.timestamp * 1000, Math.max(0.5, confidence), {
+        return reliableEvent('TAKEAWAY', i, frame.timestamp * 1000, confidence, {
           velocity: v,
           direction: d,
           isAwayFromTarget: true,
@@ -262,16 +263,35 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
     frameCount: number,
   ): SwingEvent {
     const startSearch = takeawayFrame !== null ? takeawayFrame + 1 : 0;
+    const { directionChangeMinDelta } = this.config;
 
     // Find the frame with maximum wrist height between takeaway and end
     let maxHeight = -Infinity;
     let maxIdx = -1;
+    let downswingFrames = 0;
 
     for (let i = startSearch; i < frameCount; i++) {
       const h = wristHeights[i];
+      const d = directions[i];
+
       if (!isNaN(h) && h > maxHeight) {
         maxHeight = h;
         maxIdx = i;
+        downswingFrames = 0; // Reset if we found a new high
+      }
+
+      // If we have a peak and hand is moving positively (towards target) -> downswing
+      if (!isNaN(d) && maxIdx !== -1) {
+        if (d > directionChangeMinDelta) {
+          downswingFrames++;
+          if (downswingFrames > 3) {
+            // Definitively in downswing, stop searching to avoid matching a high finish
+            break;
+          }
+        } else if (d <= 0) {
+          // Hand stopped moving towards target or moved away again
+          downswingFrames = 0;
+        }
       }
     }
 
@@ -279,7 +299,7 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
       const frame = timeline.frames[maxIdx];
       // Confidence based on how clearly the peak stands out
       const confidence = Math.min(1, maxHeight * 5); // scale by peak magnitude
-      return reliableEvent('TOP', maxIdx, frame.timestamp * 1000, Math.max(0.5, confidence), {
+      return reliableEvent('TOP', maxIdx, frame.timestamp * 1000, confidence, {
         wristHeight: maxHeight,
         frameIndex: maxIdx,
       });
@@ -392,7 +412,7 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
 
     if (bestIdx >= 0) {
       const frame = timeline.frames[bestIdx];
-      const confidence = Math.max(0.5, Math.min(1, bestScore));
+      const confidence = Math.min(1, Math.max(0, bestScore));
       return reliableEvent('IMPACT_PROXY', bestIdx, frame.timestamp * 1000, confidence, {
         wristHeight: wristHeights[bestIdx],
         addressWristHeight,
@@ -540,7 +560,7 @@ export class RuleBasedSwingEventDetectorV1 implements SwingEventDetector {
           const frame = timeline.frames[midIdx];
           const avgVel = this.averageInRange(velocities, runStart, i);
           const clarity = 1 - (avgVel / stillnessVelocityThreshold);
-          return reliableEvent('FINISH', midIdx, frame.timestamp * 1000, Math.max(0.5, clarity), {
+          return reliableEvent('FINISH', midIdx, frame.timestamp * 1000, clarity, {
             avgVelocity: avgVel,
             stillFrames: consecutiveStill,
           });

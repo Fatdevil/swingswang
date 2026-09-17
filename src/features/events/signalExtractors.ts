@@ -56,13 +56,14 @@ export function extractHandVelocity(timeline: PoseTimeline): number[] {
   for (let i = 1; i < centers.length; i++) {
     const prev = centers[i - 1];
     const curr = centers[i];
+    const dt = timeline.frames[i].timestamp - timeline.frames[i - 1].timestamp;
 
-    if (isNaN(prev.x) || isNaN(curr.x)) {
+    if (isNaN(prev.x) || isNaN(curr.x) || dt <= 0) {
       velocities.push(NaN);
     } else {
       const dx = curr.x - prev.x;
       const dy = curr.y - prev.y;
-      velocities.push(Math.sqrt(dx * dx + dy * dy));
+      velocities.push(Math.sqrt(dx * dx + dy * dy) / dt);
     }
   }
   return velocities;
@@ -98,11 +99,12 @@ export function extractHandDirection(
   for (let i = 1; i < centers.length; i++) {
     const prev = centers[i - 1];
     const curr = centers[i];
+    const dt = timeline.frames[i].timestamp - timeline.frames[i - 1].timestamp;
 
-    if (isNaN(prev.x) || isNaN(curr.x)) {
+    if (isNaN(prev.x) || isNaN(curr.x) || dt <= 0) {
       directions.push(NaN);
     } else {
-      directions.push((curr.x - prev.x) * sign);
+      directions.push(((curr.x - prev.x) * sign) / dt);
     }
   }
   return directions;
