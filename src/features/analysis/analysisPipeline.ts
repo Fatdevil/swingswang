@@ -162,6 +162,14 @@ export async function runAnalysisPipeline(
       : metadata.duration;
     const totalVideoFrames = Math.round(clipDuration * (metadata.frameRate || 30));
 
+    const analyzedMetadata: VideoMetadata = timeRange
+      ? {
+          ...metadata,
+          duration: clipDuration,
+          sourceDuration: metadata.duration,
+        }
+      : metadata;
+
     // Preserve media file timestamp for video player/overlay synchronization.
     // Calculate realTimestamp for real-world elapsed time (slow-motion tempo and velocity).
     const speedMultiplier = metadata.slowMotion?.speedMultiplier ?? 1.0;
@@ -174,12 +182,12 @@ export async function runAnalysisPipeline(
     }));
 
     // 4. Build raw timeline for quality checks (using media timestamps for video player sync)
-    const rawTimeline = buildTimeline(enrichedPoseFrames, totalVideoFrames, pipelineTimer.elapsed(), ANALYSIS_FRAME_RATE);
+    const rawTimeline = buildTimeline(enrichedPoseFrames, totalVideoFrames, pipelineTimer.elapsed(), effectiveAnalysisFps);
 
-    // 5. Evaluate video quality (Finding 4: Quality Gate)
+    // 5. Evaluate video quality (Finding 4: Quality Gate against analyzed clip duration)
     const qualStartMs = pipelineTimer.elapsed();
     const qualityTimer = new PerformanceTimer('stage.quality');
-    const qualityResult = evaluateVideoQuality(rawTimeline, metadata);
+    const qualityResult = evaluateVideoQuality(rawTimeline, analyzedMetadata);
     const qualDurationMs = qualityTimer.stop();
     stageTimings['quality'] = qualDurationMs;
     const isQualityFailed = qualityResult.overallStatus === 'FAIL' || !qualityResult.analysisRecommended;
@@ -201,7 +209,7 @@ export async function runAnalysisPipeline(
       stabilizedFrames,
       totalVideoFrames,
       pipelineTimer.elapsed(),
-      ANALYSIS_FRAME_RATE
+      effectiveAnalysisFps
     );
     const stabDurationMs = stabilizationTimer.stop();
     stageTimings['stabilization'] = stabDurationMs;
@@ -426,7 +434,7 @@ export async function runAnalysisPipeline(
       timestamp: new Date().toISOString(),
       subject: 'SELF_ADULT',
       audiencePolicy: { type: 'ADULT_SELF', policyVersion: '1.0.0' },
-      video: metadata,
+      video: analyzedMetadata,
       swingConfig: config,
       processing,
       pose: poseSummaryV2,

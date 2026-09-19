@@ -96,8 +96,8 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         lastProcessedAnalysisId: null,
       };
     case 'SET_STATUS': {
-      // Risk 5: Wiping results only when explicitly initiating a new process (selecting/extracting)
-      const isNewProcess = action.payload.type === 'selecting' || action.payload.type === 'extracting';
+      // Only wipe results when explicitly initiating a new extraction/analysis run (Finding 1)
+      const isNewProcess = action.payload.type === 'extracting';
       return { 
         ...state, 
         status: action.payload,
@@ -110,12 +110,12 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
       if (action.payload) {
         const score = calculateSwingScore(action.payload);
         
-        // Risk 6: Deduplicate history entries by checking unique analysisId (v1.0 schema)
+        // Deduplicate history entries and only append if score is valid (Finding 4)
         const isNewAnalysis = 
           'analysisId' in action.payload && 
           action.payload.analysisId !== state.lastProcessedAnalysisId;
         
-        const newHistory = isNewAnalysis 
+        const newHistory = isNewAnalysis && score !== null
           ? [...state.history, score] 
           : state.history;
 

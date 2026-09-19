@@ -25,6 +25,15 @@ export async function saveHistoryLocally(scores: number[]) {
   }
 }
 
+function sanitizeScores(raw: unknown): number[] {
+  if (raw && typeof raw === 'object' && 'scores' in raw && Array.isArray((raw as any).scores)) {
+    return (raw as any).scores.filter((s: unknown): s is number =>
+      typeof s === 'number' && Number.isFinite(s) && s >= 1.0 && s <= 10.0
+    );
+  }
+  return [];
+}
+
 export async function loadHistoryLocally(): Promise<number[]> {
   try {
     if (Platform.OS === 'web') {
@@ -32,7 +41,7 @@ export async function loadHistoryLocally(): Promise<number[]> {
         const content = window.localStorage.getItem(HISTORY_WEB_KEY);
         if (content) {
           const parsed = JSON.parse(content);
-          return parsed.scores || [];
+          return sanitizeScores(parsed);
         }
       }
       return [];
@@ -41,7 +50,7 @@ export async function loadHistoryLocally(): Promise<number[]> {
     if (info.exists) {
       const content = await readAsStringAsync(HISTORY_FILE_PATH);
       const parsed = JSON.parse(content);
-      return parsed.scores || [];
+      return sanitizeScores(parsed);
     }
   } catch (e) {
     console.error('Failed to load history', e);

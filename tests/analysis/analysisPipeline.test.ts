@@ -191,5 +191,33 @@ describe('runAnalysisPipeline V1 Integration', () => {
     expect(result.timeline.frames.length).toBeLessThan(25);
     expect(result.timeline.frames.length).toBeGreaterThanOrEqual(14);
     expect(result.timeline.frames[0].timestamp).toBeGreaterThanOrEqual(1.0);
+    expect(result.analysisResult.video.duration).toBeCloseTo(1.0, 1);
+    expect(result.analysisResult.video.sourceDuration).toBe(mockMetadata.duration);
+  });
+
+  it('evaluates quality against trimmed clip duration instead of full video duration', async () => {
+    // 45s source video (would fail with VIDEO_TOO_LONG_HARD if not trimmed)
+    const longMetadata: VideoMetadata = {
+      ...mockMetadata,
+      duration: 45.0,
+    };
+
+    const result = await runAnalysisPipeline(
+      'file://long-video.mp4',
+      longMetadata,
+      () => {},
+      { mode: 'MOCK' },
+      undefined,
+      mockSwingConfig,
+      { startTime: 10.0, endTime: 14.0 } // 4.0s clip
+    );
+
+    expect(result.analysisResult.video.duration).toBeCloseTo(4.0, 1);
+    expect(result.analysisResult.video.sourceDuration).toBe(45.0);
+    // Should NOT have VIDEO_TOO_LONG_HARD warning
+    const hasTooLongHard = result.analysisResult.quality?.warnings.some(
+      w => w.code === 'VIDEO_TOO_LONG_HARD'
+    );
+    expect(hasTooLongHard).toBe(false);
   });
 });

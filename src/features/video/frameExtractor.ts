@@ -103,23 +103,7 @@ async function extractFramesWeb(
           video.currentTime = timestamp;
         });
 
-        const timeDiff = Math.abs(video.currentTime - timestamp);
-        if (ctx && timeDiff <= 0.3) {
-          ctx.drawImage(video, 0, 0, width, height);
-          const dataUri = canvas.toDataURL('image/jpeg', 0.7);
-          frames.push({
-            imageUri: dataUri,
-            timestamp,
-            index: i,
-          });
-        } else if (frames.length > 0) {
-          // Re-use last extracted frame data URL if this specific seek timed out
-          frames.push({
-            imageUri: frames[frames.length - 1].imageUri,
-            timestamp,
-            index: i,
-          });
-        } else if (ctx) {
+        if (ctx) {
           ctx.drawImage(video, 0, 0, width, height);
           const dataUri = canvas.toDataURL('image/jpeg', 0.7);
           frames.push({
@@ -128,29 +112,19 @@ async function extractFramesWeb(
             index: i,
           });
         }
-      } catch {
-        frames.push({
-          imageUri: uri,
-          timestamp,
-          index: i,
-        });
+      } catch (frameErr) {
+        Logger.video.warn(`Failed to capture frame at ${timestamp}s`, { error: String(frameErr) });
       }
       onProgress?.((i + 1) / timestamps.length);
     }
   } catch (err) {
-    Logger.video.warn('Web video extraction encountered an error, falling back to timestamps', { error: String(err) });
+    Logger.video.error('Web video extraction encountered an unrecoverable error', { error: String(err) });
+    throw new Error(`Web video frame extraction failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // Fallback if browser canvas extraction was blocked or returned 0 frames
-  if (frames.length === 0 && timestamps.length > 0) {
-    for (let i = 0; i < timestamps.length; i++) {
-      frames.push({
-        imageUri: uri,
-        timestamp: timestamps[i],
-        index: i,
-      });
-      onProgress?.((i + 1) / timestamps.length);
-    }
+  // If browser canvas extraction was blocked or returned 0 frames, fail explicitly
+  if (frames.length === 0) {
+    throw new Error('Web video frame extraction produced 0 frames: browser could not decode video');
   }
 
   return frames;

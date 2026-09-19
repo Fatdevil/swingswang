@@ -20,13 +20,19 @@ export function useAnalysis() {
 
   /** Open picker and load a video. */
   const selectAndLoadVideo = useCallback(async () => {
+    const previousStatus = state.analysisResult
+      ? { type: 'completed' as const }
+      : state.videoSource
+      ? { type: 'ready' as const }
+      : { type: 'idle' as const };
+
     try {
       dispatch({ type: 'SET_STATUS', payload: { type: 'selecting' } });
 
       const source = await selectVideo();
 
       if (!source) {
-        dispatch({ type: 'SET_STATUS', payload: { type: 'idle' } });
+        dispatch({ type: 'SET_STATUS', payload: previousStatus });
         return;
       }
 
@@ -35,7 +41,7 @@ export function useAnalysis() {
 
       if (!validation.isValid) {
         Alert.alert('Video Error', validation.errors.join('\n'));
-        dispatch({ type: 'SET_STATUS', payload: { type: 'idle' } });
+        dispatch({ type: 'SET_STATUS', payload: previousStatus });
         return;
       }
 
@@ -49,9 +55,9 @@ export function useAnalysis() {
       const msg = error instanceof Error ? error.message : String(error);
       Logger.video.error('Video selection failed', { error: msg });
       Alert.alert('Error', msg);
-      dispatch({ type: 'SET_STATUS', payload: { type: 'idle' } });
+      dispatch({ type: 'SET_STATUS', payload: previousStatus });
     }
-  }, [dispatch]);
+  }, [dispatch, state.videoSource, state.analysisResult]);
 
   /** Run the full analysis pipeline on the loaded video. Returns true on success. */
   const startAnalysis = useCallback(async (timeRange?: { startTime: number; endTime: number }): Promise<boolean> => {

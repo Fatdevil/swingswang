@@ -39,6 +39,8 @@ export interface VideoMetadata {
   readonly mimeType: string | null;
   /** Detected or configured slow-motion properties. */
   readonly slowMotion?: SlowMotionInfo;
+  /** Original source video duration in seconds when analyzing a trimmed range. */
+  readonly sourceDuration?: number;
 }
 
 /** A video ready for analysis. */

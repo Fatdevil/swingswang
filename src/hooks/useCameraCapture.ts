@@ -119,17 +119,14 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
   };
 
   const recordActiveClip = async () => {
-    if (!cameraRef.current) return;
-    try {
-      // Request microphone permission just-in-time before recording (Finding 19)
-      if (requestMicrophonePermission) {
-        try {
-          await requestMicrophonePermission();
-        } catch (e) {
-          Logger.video.warn('Microphone permission request failed', { error: String(e) });
-        }
-      }
+    if (!cameraRef.current) {
+      resetCameraStates();
+      return;
+    }
 
+    let clipStartTime = Date.now();
+
+    try {
       setCameraMode('video');
       // Brief pause to allow camera view mode transition
       await new Promise((r) => setTimeout(r, 200));
@@ -139,7 +136,8 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
         mute: true,
       });
 
-      recordingStartTimeRef.current = Date.now();
+      clipStartTime = Date.now();
+      recordingStartTimeRef.current = clipStartTime;
 
       // Automatically stop recording after max duration
       if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
@@ -154,18 +152,18 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
         recordingTimeoutRef.current = null;
       }
 
-      // Calculate actual elapsed duration instead of hardcoding 5.0 seconds (Finding 2)
-      const actualDurationSeconds = recordingStartTimeRef.current
-        ? Math.max(0.5, Math.min(10, (Date.now() - recordingStartTimeRef.current) / 1000))
-        : RECORDING_DURATION_MS / 1000;
+      // Calculate actual elapsed duration accurately (Finding 2)
+      const startTime = recordingStartTimeRef.current ?? clipStartTime;
+      const actualDurationSeconds = Math.max(0.5, Math.min(10, (Date.now() - startTime) / 1000));
 
       if (video?.uri) {
+        // Use standard video recording resolution (1080x1920) rather than UI screen layout points (Finding 6)
         setVideoSource({
           uri: video.uri,
           metadata: {
             duration: actualDurationSeconds,
-            width: cameraLayout.width || 1080,
-            height: cameraLayout.height || 1920,
+            width: 1080,
+            height: 1920,
             orientation: 'portrait',
             frameRate: 30,
             fileSize: 0,
@@ -184,10 +182,7 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
 
   const stopRecording = () => {
     // If in countdown, cancel countdown and reset state immediately (Finding 2)
-    if (countdownIntervalRef.current) {
-      clearInterval(countdownIntervalRef.current);
-      countdownIntervalRef.current = null;
-    }
+    clearAllTimers();
     setCountdown(null);
     recordingStartedRef.current = false;
     setIsRecording(false);
@@ -199,7 +194,7 @@ export function useCameraCapture({ cameraRef, cameraLayout, setVideoSource, rout
         Logger.video.warn('stopRecording failed or camera not ready', { error: String(e) });
       }
     }
-    resetCameraStates();
+    // Do not call resetCameraStates() here to preserve recordingStartTimeRef until recordAsync resolves
   };
 
   return {

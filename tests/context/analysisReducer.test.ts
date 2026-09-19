@@ -68,7 +68,7 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         lastProcessedAnalysisId: null,
       };
     case 'SET_STATUS': {
-      const isNewProcess = action.payload.type === 'selecting' || action.payload.type === 'extracting';
+      const isNewProcess = action.payload.type === 'extracting';
       return {
         ...state,
         status: action.payload,
@@ -83,7 +83,7 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         const isNewAnalysis =
           'analysisId' in action.payload &&
           action.payload.analysisId !== state.lastProcessedAnalysisId;
-        const newHistory = isNewAnalysis
+        const newHistory = isNewAnalysis && score !== null
           ? [...state.history, score]
           : state.history;
         return {
@@ -232,7 +232,7 @@ describe('AnalysisContext Reducer', () => {
       expect(result.status).toEqual({ type: 'analyzing', progress: 0.5 });
     });
 
-    it('clears analysis data when status is "selecting"', () => {
+    it('preserves analysis data when status is "selecting"', () => {
       const stateWithData = {
         ...initialState,
         poseTimeline: { frames: [] },
@@ -244,9 +244,9 @@ describe('AnalysisContext Reducer', () => {
         payload: { type: 'selecting' },
       });
 
-      expect(result.poseTimeline).toBeNull();
-      expect(result.analysisResult).toBeNull();
-      expect(result.lastProcessedAnalysisId).toBeNull();
+      expect(result.poseTimeline).toEqual({ frames: [] });
+      expect(result.analysisResult).toEqual({ schemaVersion: '0.1' });
+      expect(result.lastProcessedAnalysisId).toBe('test-id');
     });
 
     it('clears analysis data when status is "extracting"', () => {
