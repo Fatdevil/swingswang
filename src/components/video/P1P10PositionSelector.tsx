@@ -66,8 +66,9 @@ export function P1P10PositionSelector({
 
     for (const pos of POSITIONS) {
       const evt = eventsMap[pos];
-      if (evt && evt.timestampMs !== null && evt.status !== 'ABSTAIN') {
-        const timeSec = evt.timestampMs / 1000;
+      const tMs = evt?.mediaTimestampMs ?? evt?.timestampMs;
+      if (evt && tMs !== null && tMs !== undefined && evt.status !== 'ABSTAIN') {
+        const timeSec = tMs / 1000;
         const diff = Math.abs(currentTime - timeSec);
         if (diff < minDiff) {
           minDiff = diff;
@@ -89,10 +90,11 @@ export function P1P10PositionSelector({
         {POSITIONS.map((pos) => {
           const evt = eventsMap[pos];
           const info = P1P10_SWEDISH_NAMES[pos];
-          const isDetected = evt && evt.status !== 'ABSTAIN' && evt.timestampMs !== null;
+          const effectiveMs = evt?.mediaTimestampMs ?? evt?.timestampMs;
+          const isDetected = evt && evt.status !== 'ABSTAIN' && effectiveMs !== null && effectiveMs !== undefined;
           const isProxy = evt?.status === 'DETECTED_PROXY';
           const isAbstained = !evt || evt.status === 'ABSTAIN';
-          const timeSec = isDetected ? (evt!.timestampMs! / 1000) : null;
+          const timeSec = isDetected && effectiveMs !== null && effectiveMs !== undefined ? (effectiveMs / 1000) : null;
           const isActive = (selectedPosition === pos) || (closestPosition === pos);
 
           return (

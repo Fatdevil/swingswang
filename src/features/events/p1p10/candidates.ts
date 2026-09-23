@@ -62,6 +62,16 @@ export function computeQualityScore(
 }
 
 /**
+ * Converts a millisecond duration into frame count based on the sequence's average frame step.
+ */
+export function msToFrames(frames: readonly ProcessedFrame[], ms: number, minFrames = 1): number {
+  if (frames.length < 2) return minFrames;
+  const totalDurationMs = frames[frames.length - 1].timestampMs - frames[0].timestampMs;
+  const avgFrameDurationMs = totalDurationMs / (frames.length - 1);
+  return Math.max(minFrames, Math.round(ms / Math.max(1, avgFrameDurationMs)));
+}
+
+/**
  * Checks landmark health across specified key landmarks:
  * Returns geometric mean, or 0 if any landmark is below hard floor (0.50).
  */
@@ -271,13 +281,12 @@ export function generateCandidatesForPosition(
 
     case 'P5': {
       // P5: Lead arm parallel to ground in downswing (leadArmDeg <= 12 deg, falling, after P4)
-      const downswingStable = isArmTrackStable(frames, topIdx, Math.min(n - 1, topIdx + 30));
+      const downswingStable = isArmTrackStable(frames, topIdx, Math.min(n - 1, topIdx + msToFrames(frames, 300, 3)));
       if (!downswingStable) {
         break; // Downswing arm tracking compromised; abstain P5
       }
 
-      const remainingP5 = n - 1 - topIdx;
-      const p5Limit = Math.min(n, topIdx + Math.max(25, Math.round(remainingP5 * 0.50)));
+      const p5Limit = Math.min(n, topIdx + msToFrames(frames, 300, 2));
 
       for (let i = topIdx + 1; i < p5Limit; i++) {
         const f = frames[i];
@@ -314,8 +323,7 @@ export function generateCandidatesForPosition(
     case 'P6': {
       // P6: Shaft parallel downswing -> POSE-ONLY PROXY (P6_PROXY)
       // Grip passes delivery hip band with falling trajectory and high speed.
-      const remainingP6 = n - 1 - topIdx;
-      const p6Limit = Math.min(n, topIdx + Math.max(30, Math.round(remainingP6 * 0.65)));
+      const p6Limit = Math.min(n, topIdx + msToFrames(frames, 400, 3));
       const hipLevelY = frames[p1Idx].midHip.y;
 
       for (let i = topIdx + 1; i < p6Limit; i++) {
@@ -353,11 +361,11 @@ export function generateCandidatesForPosition(
     case 'P7': {
       // P7: Impact -> POSE-ONLY PROXY (IMPACT_PROXY)
       // Minimum distance to address grip zone & passage through lower arc
-      const remainingP7 = n - 1 - topIdx;
-      const p7Limit = Math.min(n, topIdx + Math.max(35, Math.round(remainingP7 * 0.85)));
+      const p7Start = topIdx + msToFrames(frames, 50, 1);
+      const p7Limit = Math.min(n, topIdx + msToFrames(frames, 550, 4));
       const addrGrip = frames[p1Idx].grip2D;
 
-      for (let i = topIdx + 2; i < p7Limit; i++) {
+      for (let i = p7Start; i < p7Limit; i++) {
         const f = frames[i];
         const distToAddr =
           Math.hypot(f.grip2D.x - addrGrip.x, f.grip2D.y - addrGrip.y) / s2D;
@@ -396,8 +404,8 @@ export function generateCandidatesForPosition(
       // P8: Shaft parallel follow-through -> POSE-ONLY PROXY (P8_PROXY)
       // First exit passing corresponding hip band after impact
       const hipLevelY = frames[p1Idx].midHip.y;
-      const searchStart = topIdx + 3;
-      const p8Limit = Math.min(n, searchStart + Math.max(40, Math.round((n - searchStart) * 0.60)));
+      const searchStart = topIdx + msToFrames(frames, 100, 1);
+      const p8Limit = Math.min(n, topIdx + msToFrames(frames, 700, 5));
 
       for (let i = searchStart; i < p8Limit; i++) {
         const f = frames[i];
@@ -433,8 +441,8 @@ export function generateCandidatesForPosition(
 
     case 'P9': {
       // P9: Trail arm parallel to ground in through-swing (trailArmDeg <= 15 deg, rising)
-      const searchStart = topIdx + 4;
-      const p9Limit = Math.min(n, searchStart + Math.max(60, n - searchStart));
+      const searchStart = topIdx + msToFrames(frames, 150, 2);
+      const p9Limit = Math.min(n, topIdx + msToFrames(frames, 1200, 6));
 
       for (let i = searchStart; i < p9Limit; i++) {
         const f = frames[i];
@@ -470,7 +478,7 @@ export function generateCandidatesForPosition(
 
     case 'P10': {
       // P10: Finish: first stable frame in finish plateau (>= 150 ms stable, low body speed)
-      const searchStart = topIdx + 10;
+      const searchStart = topIdx + msToFrames(frames, 250, 2);
       for (let i = searchStart; i < n - 3; i++) {
         const f = frames[i];
         if (f.gripSpeed < 0.35 && f.midHipSpeed < 0.20) {

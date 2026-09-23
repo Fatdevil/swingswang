@@ -57,9 +57,9 @@ export function calculateLandmarkQuality(lm: Landmark): number {
  * Computes the angle of a 2D vector relative to the image horizontal in degrees.
  * 0° = perfectly horizontal, 90° = vertical.
  */
-export function angleToImageHorizontal(v: Vec3): number {
+export function angleToImageHorizontal(v: Vec3, aspectRatio = 1.0): number {
   const absY = Math.abs(v.y);
-  const absX = Math.abs(v.x);
+  const absX = Math.abs(v.x) * (aspectRatio > 0 ? aspectRatio : 1.0);
   if (absX < 1e-7 && absY < 1e-7) return 0;
   const rad = Math.atan2(absY, absX);
   return (rad * 180) / Math.PI;
@@ -191,8 +191,12 @@ export function canonicalizeFrame(
     z: trailWrist.z - trailShoulder.z,
   };
 
-  const leadArmDeg = angleToImageHorizontal(leadArm);
-  const trailArmDeg = angleToImageHorizontal(trailArm);
+  const srcW = frame.sourceSizePx?.width;
+  const srcH = frame.sourceSizePx?.height;
+  const aspectRatio = (srcW && srcH && srcW > 1 && srcH > 1) ? srcW / srcH : 1.0;
+
+  const leadArmDeg = angleToImageHorizontal(leadArm, aspectRatio);
+  const trailArmDeg = angleToImageHorizontal(trailArm, aspectRatio);
 
   return {
     frameIndex: frame.frameIndex,

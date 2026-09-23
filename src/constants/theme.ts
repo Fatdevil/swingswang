@@ -39,10 +39,12 @@ export const COLORS = {
   border: '#E2E8F0',
   /** Divider line. */
   divider: '#F1F5F9',
-  /** Skeleton overlay — light green bones. */
-  skeletonBone: 'rgba(16, 185, 129, 0.15)',
+  /** Skeleton overlay — high-contrast crisp white bones. */
+  skeletonBone: 'rgba(255, 255, 255, 0.95)',
+  /** Skeleton bone shadow / background outline for universal contrast against grass. */
+  skeletonBoneShadow: 'rgba(15, 23, 42, 0.70)',
   /** Skeleton joint. */
-  skeletonJoint: 'rgba(16, 185, 129, 0.4)',
+  skeletonJoint: 'rgba(16, 185, 129, 0.8)',
   /** Overlay background. */
   overlay: 'rgba(15, 23, 42, 0.3)',
 } as const;

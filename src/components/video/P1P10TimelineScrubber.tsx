@@ -23,6 +23,7 @@ export interface P1P10EventItem {
   readonly semantic: string;
   readonly status: 'DETECTED_EXACT' | 'DETECTED_PROXY' | 'ABSTAIN';
   readonly timestampMs: number | null;
+  readonly mediaTimestampMs?: number | null;
   readonly qualityScore?: number | null;
   readonly warnings?: string[];
 }
@@ -59,12 +60,18 @@ export function P1P10TimelineScrubber({
       : POSITIONS.map((p) => (events as Record<PPosition, P1P10EventItem>)[p]).filter(Boolean);
 
     return items
-      .filter((e) => e.timestampMs !== null && typeof e.timestampMs === 'number' && e.status !== 'ABSTAIN')
-      .map((e) => ({
-        ...e,
-        timeSec: (e.timestampMs as number) / 1000,
-        percent: Math.max(0, Math.min(100, (((e.timestampMs as number) / 1000) / safeDuration) * 100)),
-      }));
+      .filter((e) => {
+        const tMs = e.mediaTimestampMs ?? e.timestampMs;
+        return tMs !== null && typeof tMs === 'number' && e.status !== 'ABSTAIN';
+      })
+      .map((e) => {
+        const effectiveMs = (e.mediaTimestampMs ?? e.timestampMs) as number;
+        return {
+          ...e,
+          timeSec: effectiveMs / 1000,
+          percent: Math.max(0, Math.min(100, (effectiveMs / 1000 / safeDuration) * 100)),
+        };
+      });
   }, [events, safeDuration]);
 
   const currentPercent = Math.max(0, Math.min(100, (currentTime / safeDuration) * 100));

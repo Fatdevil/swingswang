@@ -26,6 +26,7 @@ import {
   SwingEvent as P1P10SwingEvent,
   PipelineTrace as P1P10PipelineTrace,
   PPosition,
+  POSITIONS,
 } from './types';
 import { P1P10EventDetector } from './P1P10EventDetector';
 
@@ -120,18 +121,16 @@ export function timelineToP1P10Frames(
       presence: lm.presence,
     }));
 
-    // Use physical realTimestamp if available for physical velocity and duration priors.
-    // If not supplied, detect if timeline represents retimed slow-motion playback (> 4s for high frame count)
+    // Use physical realTimestamp if available for physical velocity and duration priors,
+    // which analysisPipeline.ts computes via detectSlowMotion.
     let timeSec = f.realTimestamp !== undefined && f.realTimestamp !== null
       ? f.realTimestamp
       : f.timestamp;
 
-    if ((f.realTimestamp === undefined || f.realTimestamp === f.timestamp) && timeline.frames.length >= 100) {
-      const totalDur = timeline.endTime - timeline.startTime;
-      if (totalDur > 4.0) {
-        const inferredFps = timeline.frames.length >= 220 ? 240 : 120;
-        timeSec = idx / inferredFps;
-      }
+    // Fallback for standalone/test timelines where realTimestamp was not populated
+    // but high-speed capture FPS was explicitly specified:
+    if (f.realTimestamp === undefined && timeline.analyzedFPS >= 60) {
+      timeSec = idx / timeline.analyzedFPS;
     }
 
     const timestampUs = Math.round(timeSec * 1_000_000);
@@ -142,8 +141,8 @@ export function timelineToP1P10Frames(
       image: imageLandmarks,
       world: worldLandmarks,
       sourceSizePx: {
-        width: f.sourceWidth || 1080,
-        height: f.sourceHeight || 1920,
+        width: f.sourceWidth && f.sourceWidth > 1 ? f.sourceWidth : 1080,
+        height: f.sourceHeight && f.sourceHeight > 1 ? f.sourceHeight : 1920,
       },
       rotationAppliedDeg: 0,
       inputWasMirrored: false,
@@ -333,6 +332,24 @@ export function p1p10ToSwingEventResult(
     }
   }
 
+  // Map mediaTimestampMs to all P1–P10 events for video player and UI scrubbing
+  const p1p10EventsWithMedia: Record<PPosition, P1P10SwingEvent> = { ...p1p10Result.events };
+  for (const pos of POSITIONS) {
+    const evt = p1p10Result.events[pos];
+    if (evt) {
+      let mediaTimestampMs: number | null = null;
+      if (evt.frameIndex !== null && evt.frameIndex >= 0 && evt.frameIndex < timeline.frames.length) {
+        mediaTimestampMs = Math.round(timeline.frames[evt.frameIndex].timestamp * 1000);
+      } else {
+        mediaTimestampMs = evt.timestampMs;
+      }
+      p1p10EventsWithMedia[pos] = {
+        ...evt,
+        mediaTimestampMs,
+      };
+    }
+  }
+
   return {
     events,
     detectedCount,
@@ -340,7 +357,7 @@ export function p1p10ToSwingEventResult(
     temporalOrderValid,
     warnings,
     p1p10Result,
-    p1p10Events: p1p10Result.events,
+    p1p10Events: p1p10EventsWithMedia,
     p1p10Trace: p1p10Result.trace,
   };
 }
@@ -359,16 +376,28 @@ export class P1P10TimelineAdapter implements SwingEventDetector {
   }
 
   detect(timeline: PoseTimeline, config: SwingConfig): P1P10SwingEventResult {
-    const totalDur = timeline.endTime - timeline.startTime;
-    const nominalFps = timeline.analyzedFPS >= 60
-      ? timeline.analyzedFPS
-      : (timeline.frames.length >= 220 && totalDur > 4.0 ? 240 : (timeline.frames.length >= 100 && totalDur > 3.0 ? 120 : (timeline.analyzedFPS > 0 ? timeline.analyzedFPS : 30)));
+    let nominalFps = timeline.analyzedFPS;
+    if (!nominalFps || nominalFps <= 0) {
+      const dts: number[] = [];
+      for (let i = 1; i < timeline.frames.length; i++) {
+        const dt = (timeline.frames[i].realTimestamp ?? timeline.frames[i].timestamp) -
+          (timeline.frames[i - 1].realTimestamp ?? timeline.frames[i - 1].timestamp);
+        if (dt > 0.001) dts.push(dt);
+      }
+      if (dts.length > 0) {
+        dts.sort((a, b) => a - b);
+        const medianDt = dts[Math.floor(dts.length / 2)];
+        nominalFps = Math.round(1 / medianDt);
+      } else {
+        nominalFps = 30;
+      }
+    }
 
     const context: CaptureContext = {
       view: config.cameraView === 'DTL' ? 'DTL' : 'FACE_ON',
       handedness: config.handedness === 'LEFT' ? 'LEFT' : 'RIGHT',
       mode: 'VIDEO',
-      nominalFps,
+      nominalFps: Math.max(15, nominalFps),
     };
 
     if (timeline.frames.length < 5) {

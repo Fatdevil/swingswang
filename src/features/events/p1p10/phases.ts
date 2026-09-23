@@ -43,23 +43,32 @@ export interface SwingPhases {
 export function findAddressWindow(
   frames: readonly ProcessedFrame[],
   s2D: number,
+  maxSearchIdx?: number,
 ): AddressWindow | null {
   const n = frames.length;
   if (n < 5) return null;
 
   const minDurationMs = 250.0;
+  const limitIdx = maxSearchIdx !== undefined && maxSearchIdx > 0 ? Math.min(n, maxSearchIdx) : n;
   let bestWindow: AddressWindow | null = null;
 
+  // Estimate sequence noise floor from 20th percentile of grip speed
+  const sortedSpeeds = frames
+    .map(f => f.gripSpeed)
+    .filter(s => typeof s === 'number' && !isNaN(s))
+    .sort((a, b) => a - b);
+  const baselineNoise = sortedSpeeds.length > 0 ? sortedSpeeds[Math.floor(sortedSpeeds.length * 0.20)] : 0.05;
+
   // Search forward through frames
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < limitIdx; i++) {
     const tStartMs = frames[i].timestampMs;
     let endIdx = i;
 
-    while (endIdx < n && frames[endIdx].timestampMs - tStartMs < minDurationMs) {
+    while (endIdx < limitIdx && frames[endIdx].timestampMs - tStartMs < minDurationMs) {
       endIdx++;
     }
 
-    if (endIdx >= n) break;
+    if (endIdx >= limitIdx) break;
 
     const windowFrames = frames.slice(i, endIdx + 1);
     const durationMs = frames[endIdx].timestampMs - tStartMs;
@@ -74,13 +83,12 @@ export function findAddressWindow(
       const qLWrist = f.quality[LANDMARK_INDEX.LEFT_WRIST];
       const qRWrist = f.quality[LANDMARK_INDEX.RIGHT_WRIST];
 
-      if (qLAnkle < 0.40 && qRAnkle < 0.40 || (qLWrist < 0.50 && qRWrist < 0.50)) {
+      if ((qLAnkle < 0.35 && qRAnkle < 0.35) || (qLWrist < 0.35 && qRWrist < 0.35)) {
         qualityOk = false;
         break;
       }
 
-      // Check feet in frame (allow slight overshoot — MediaPipe often reports
-      // coordinates slightly outside [0, 1] for keypoints near the frame edge)
+      // Check feet in frame (allow slight overshoot)
       const lAnkleRaw = f.imageRaw[LANDMARK_INDEX.LEFT_ANKLE];
       const rAnkleRaw = f.imageRaw[LANDMARK_INDEX.RIGHT_ANKLE];
       if (
@@ -96,9 +104,20 @@ export function findAddressWindow(
 
     // Check address posture: wrists hang below shoulders in yUp
     const isAddressPosture = windowFrames.every(
-      f => f.grip2D.y < f.midShoulder.y - 0.05 * s2D
+      f => f.grip2D.y < f.midShoulder.y - 0.03 * s2D
     );
     if (!isAddressPosture) continue;
+
+    // Displacement-based stillness check: bounding box of grip across 250ms
+    let minGripX = Infinity, maxGripX = -Infinity;
+    let minGripY = Infinity, maxGripY = -Infinity;
+    for (const f of windowFrames) {
+      if (f.grip2D.x < minGripX) minGripX = f.grip2D.x;
+      if (f.grip2D.x > maxGripX) maxGripX = f.grip2D.x;
+      if (f.grip2D.y < minGripY) minGripY = f.grip2D.y;
+      if (f.grip2D.y > maxGripY) maxGripY = f.grip2D.y;
+    }
+    const gripDisp = Math.hypot((maxGripX - minGripX) / s2D, (maxGripY - minGripY) / s2D);
 
     // Calculate median speeds
     const gripSpeeds = windowFrames.map(f => f.gripSpeed).sort((a, b) => a - b);
@@ -107,15 +126,15 @@ export function findAddressWindow(
     const medianGrip = gripSpeeds[Math.floor(gripSpeeds.length / 2)];
     const medianHip = hipSpeeds[Math.floor(hipSpeeds.length / 2)];
 
-    // Adaptive quiescence thresholds: compensate for increased velocity noise
-    // at small s2D. Noise in S/s scales as ~1/s2D since pixel jitter is constant
-    // but gets divided by a smaller denominator.
-    // Reference: at s2D ≈ 0.25 (typical close-up), base thresholds apply.
+    // Adaptive quiescence thresholds: combine noiseScale with baseline sequence noise
     const noiseScale = Math.max(1.0, 0.25 / Math.max(s2D, 0.05));
-    const gripSpeedLimit = 0.20 * noiseScale;
-    const hipSpeedLimit = 0.15 * noiseScale;
+    const gripSpeedLimit = Math.max(0.20 * noiseScale, baselineNoise * 2.5);
+    const hipSpeedLimit = Math.max(0.18 * noiseScale, baselineNoise * 2.0);
 
-    if (medianGrip < gripSpeedLimit && medianHip < hipSpeedLimit) {
+    const isStillDisplacement = gripDisp < 0.08 * noiseScale;
+    const isStillSpeed = medianGrip < gripSpeedLimit && medianHip < hipSpeedLimit;
+
+    if (isStillDisplacement || isStillSpeed) {
       // Calculate mean grip position
       let sumGripX = 0;
       let sumGripY = 0;
@@ -138,9 +157,6 @@ export function findAddressWindow(
         meanGrip2D: { x: sumGripX / count, y: sumGripY / count, z: 0 },
         meanHip2D: { x: sumHipX / count, y: sumHipY / count, z: 0 },
       };
-    } else if (bestWindow !== null && frames[i].gripSpeed > 0.35 * noiseScale) {
-      // Address was found and swing has now clearly launched; stop searching
-      break;
     }
   }
 
@@ -300,9 +316,14 @@ export function findTransitionTop(
   takeawayIdx: number,
   progress: readonly number[],
   s2D: number,
+  maxSearchIdx?: number,
 ): number | null {
   const n = frames.length;
   if (takeawayIdx >= n - 5) return null;
+
+  const searchEnd = maxSearchIdx !== undefined && maxSearchIdx > takeawayIdx + 2
+    ? Math.min(n - 1, maxSearchIdx)
+    : n - 3;
 
   // Adaptive thresholds: same noise compensation as findAddressWindow
   const noiseScale = Math.max(1.0, 0.25 / Math.max(s2D, 0.05));
@@ -311,7 +332,7 @@ export function findTransitionTop(
   let bestIdx: number | null = null;
   let maxProg = -1;
 
-  for (let i = takeawayIdx; i < n - 3; i++) {
+  for (let i = takeawayIdx; i <= searchEnd; i++) {
     if (progress[i] > maxProg) {
       maxProg = progress[i];
       bestIdx = i;
@@ -322,7 +343,7 @@ export function findTransitionTop(
     // Kinematic geometric fallback: find global maximum of grip height (yUp)
     let maxY = -Infinity;
     let maxYIdx: number | null = null;
-    for (let i = takeawayIdx; i < n - 5; i++) {
+    for (let i = takeawayIdx; i <= searchEnd; i++) {
       if (frames[i].grip2D.y > maxY) {
         maxY = frames[i].grip2D.y;
         maxYIdx = i;
@@ -337,7 +358,8 @@ export function findTransitionTop(
   // Check if there is a plateau (pause at the top):
   // "En paus på toppen är tillåten; välj sista stabila frame före accelerationen ned."
   let lastStableIdx = bestIdx;
-  for (let i = bestIdx; i < Math.min(n - 2, bestIdx + contextWindowFrames(frames, 350)); i++) {
+  const plateauLimit = Math.min(searchEnd, bestIdx + contextWindowFrames(frames, 350));
+  for (let i = bestIdx; i < plateauLimit; i++) {
     const pDiff = Math.abs(progress[i] - maxProg);
     const isStationary = frames[i].gripSpeed < 0.25 * noiseScale;
     if (pDiff < 0.08 && isStationary) {
@@ -360,7 +382,21 @@ export function segmentSwingPhases(
 ): SwingPhases {
   const reasonCodes: string[] = [];
 
-  const address = findAddressWindow(frames, s2D);
+  // 1. Locate kinetic downswing peak (maximum hand speed in clip)
+  let peakSpeed = 0;
+  let peakSpeedIdx = -1;
+  for (let i = 1; i < frames.length - 1; i++) {
+    const s = frames[i].gripSpeed;
+    if (s > peakSpeed) {
+      peakSpeed = s;
+      peakSpeedIdx = i;
+    }
+  }
+
+  const hasKineticPeak = peakSpeed > 0.40 && peakSpeedIdx > 4;
+  const addressSearchLimit = hasKineticPeak ? peakSpeedIdx : frames.length;
+
+  const address = findAddressWindow(frames, s2D, addressSearchLimit);
   if (!address) {
     reasonCodes.push('NO_STABLE_ADDRESS');
     return {
@@ -393,7 +429,8 @@ export function segmentSwingPhases(
   }
 
   const progress = computeBackswingProgress(frames, p1Idx, takeawayIdx, s2D);
-  const topIdx = findTransitionTop(frames, takeawayIdx, progress, s2D);
+  const topSearchLimit = hasKineticPeak ? peakSpeedIdx : frames.length;
+  const topIdx = findTransitionTop(frames, takeawayIdx, progress, s2D, topSearchLimit);
 
   if (topIdx === null) {
     reasonCodes.push('NO_TRANSITION');

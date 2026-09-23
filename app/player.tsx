@@ -57,8 +57,9 @@ export default function PlayerScreen() {
 
     for (const pos of POSITIONS) {
       const evt = p1p10Events[pos];
-      if (evt && evt.timestampMs !== null && evt.status !== 'ABSTAIN') {
-        const timeSec = evt.timestampMs / 1000;
+      const tMs = evt?.mediaTimestampMs ?? evt?.timestampMs;
+      if (evt && tMs !== null && tMs !== undefined && evt.status !== 'ABSTAIN') {
+        const timeSec = tMs / 1000;
         const diff = Math.abs(currentTime - timeSec);
         if (diff < minDiff) {
           minDiff = diff;

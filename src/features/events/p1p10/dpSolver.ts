@@ -28,6 +28,9 @@ interface DPNode {
   position: PPosition;
   candidate: Candidate | null; // null represents MISSING state
   timestampMs: number | null;
+  p1TimestampMs: number | null;
+  p4TimestampMs: number | null;
+  p7TimestampMs: number | null;
 }
 
 /**
@@ -107,6 +110,9 @@ export function solveMonotonicSequence(
       position: 'P1',
       candidate: cand,
       timestampMs: cand.timestampMs,
+      p1TimestampMs: cand.timestampMs,
+      p4TimestampMs: null,
+      p7TimestampMs: null,
     });
   }
 
@@ -117,6 +123,9 @@ export function solveMonotonicSequence(
     position: 'P1',
     candidate: null,
     timestampMs: null,
+    p1TimestampMs: null,
+    p4TimestampMs: null,
+    p7TimestampMs: null,
   });
 
   dpTable.push(p1Nodes);
@@ -142,11 +151,41 @@ export function solveMonotonicSequence(
 
         if (prev.timestampMs !== null) {
           const dtSec = (cand.timestampMs - prev.timestampMs) / 1000.0;
-          const evalRes = evaluateDurationPenalty(prev.position, pos, dtSec);
-          if (!evalRes.valid) {
+          if (dtSec <= 0.001) {
+            valid = false;
+          } else if (dtSec > 1.50) {
+            transPenalty += (dtSec - 1.50) * 2.0;
+          }
+        }
+
+        // Major phase transition boundaries checks
+        if (valid && pos === 'P4' && prev.p1TimestampMs !== null) {
+          const dtP1P4 = (cand.timestampMs - prev.p1TimestampMs) / 1000.0;
+          const p1p4Eval = evaluateDurationPenalty('P1', 'P4', dtP1P4);
+          if (!p1p4Eval.valid) {
             valid = false;
           } else {
-            transPenalty = evalRes.penalty;
+            transPenalty += p1p4Eval.penalty;
+          }
+        }
+
+        if (valid && pos === 'P7' && prev.p4TimestampMs !== null) {
+          const dtP4P7 = (cand.timestampMs - prev.p4TimestampMs) / 1000.0;
+          const p4p7Eval = evaluateDurationPenalty('P4', 'P7', dtP4P7);
+          if (!p4p7Eval.valid) {
+            valid = false;
+          } else {
+            transPenalty += p4p7Eval.penalty;
+          }
+        }
+
+        if (valid && pos === 'P10' && prev.p7TimestampMs !== null) {
+          const dtP7P10 = (cand.timestampMs - prev.p7TimestampMs) / 1000.0;
+          const p7p10Eval = evaluateDurationPenalty('P7', 'P10', dtP7P10);
+          if (!p7p10Eval.valid) {
+            valid = false;
+          } else {
+            transPenalty += p7p10Eval.penalty;
           }
         }
 
@@ -166,6 +205,9 @@ export function solveMonotonicSequence(
           position: pos,
           candidate: cand,
           timestampMs: cand.timestampMs,
+          p1TimestampMs: pos === 'P1' ? cand.timestampMs : bestPrev.p1TimestampMs,
+          p4TimestampMs: pos === 'P4' ? cand.timestampMs : bestPrev.p4TimestampMs,
+          p7TimestampMs: pos === 'P7' ? cand.timestampMs : bestPrev.p7TimestampMs,
         });
       }
     }
@@ -187,6 +229,9 @@ export function solveMonotonicSequence(
       position: pos,
       candidate: null,
       timestampMs: bestPrevForMissing ? bestPrevForMissing.timestampMs : null,
+      p1TimestampMs: bestPrevForMissing ? bestPrevForMissing.p1TimestampMs : null,
+      p4TimestampMs: bestPrevForMissing ? bestPrevForMissing.p4TimestampMs : null,
+      p7TimestampMs: bestPrevForMissing ? bestPrevForMissing.p7TimestampMs : null,
     });
 
     dpTable.push(currNodes);

@@ -55,7 +55,30 @@ export function SkeletonOverlay({
       height={displayHeight}
       style={{ position: 'absolute', top: 0, left: 0 }}
     >
-      {/* Bones */}
+      {/* Bones Shadow / Outline for universal contrast */}
+      {SKELETON_CONNECTIONS.map((bone, index) => {
+        const from = landmarkPos(bone.from);
+        const to = landmarkPos(bone.to);
+        if (!from || !to) return null;
+
+        const avgConf = (from.confidence + to.confidence) / 2;
+
+        return (
+          <Line
+            key={`bone-shadow-${index}`}
+            x1={from.x}
+            y1={from.y}
+            x2={to.x}
+            y2={to.y}
+            stroke={COLORS.skeletonBoneShadow}
+            strokeWidth={BONE_LINE_WIDTH + 2}
+            strokeLinecap="round"
+            opacity={confOpacity(avgConf)}
+          />
+        );
+      })}
+
+      {/* Bones Main Line */}
       {SKELETON_CONNECTIONS.map((bone, index) => {
         const from = landmarkPos(bone.from);
         const to = landmarkPos(bone.to);
@@ -91,6 +114,8 @@ export function SkeletonOverlay({
             cy={pos.y}
             r={JOINT_RADIUS}
             fill={color}
+            stroke="rgba(15, 23, 42, 0.8)"
+            strokeWidth={1.5}
             opacity={confOpacity(lm.confidence)}
           />
         );

@@ -120,6 +120,7 @@ export interface SwingEvent {
   semantic: string; // t.ex. IMPACT_PROXY
   status: EventStatus;
   timestampMs: number | null;
+  mediaTimestampMs?: number | null;
   frameIndex: number | null;
   qualityScore: number | null; // ej kallad probability före kalibrering
   temporalUncertaintyMs: number | null;
