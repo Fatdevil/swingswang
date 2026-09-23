@@ -70,8 +70,8 @@ export function useVideoPlayer(
     }
   }, [player, uri]);
 
-  // Get current frame from timeline
-  const currentFrame = timeline?.frameAtTime(currentTime) ?? null;
+  // Pose for the current playback time, interpolated between analyzed frames
+  const currentFrame = timeline?.poseAtTime(currentTime) ?? null;
 
   const togglePlayPause = useCallback(() => {
     if (!player) return;

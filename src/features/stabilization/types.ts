@@ -22,9 +22,9 @@ export interface StabilizationConfig {
   readonly maxInterpolationGap: number;
   /** EMA base alpha — used at zero velocity (maximum smoothing). */
   readonly smoothingBaseFactor: number;
-  /** Controls how fast alpha decays with velocity (higher = faster decay). */
+  /** Controls how fast alpha rises with velocity (normalized units/frame). */
   readonly smoothingVelocityScale: number;
-  /** Floor for alpha — fastest motion gets this much smoothing at minimum. */
+  /** Alpha at zero velocity — maximum smoothing applied to a still landmark. */
   readonly minSmoothingFactor: number;
 }
 
@@ -34,7 +34,9 @@ export const DEFAULT_STABILIZATION_CONFIG: StabilizationConfig = {
   outlierVelocityThreshold: 0.15,
   maxInterpolationGap: 2,
   smoothingBaseFactor: 0.3,
-  smoothingVelocityScale: 2.0,
+  // 60 → alpha ≈ 0.3 for MediaPipe jitter (~0.005/frame) and ≈ 1.0 for
+  // downswing hand motion (≥ 0.05/frame), so fast motion passes through.
+  smoothingVelocityScale: 60.0,
   minSmoothingFactor: 0.05,
 };
 
