@@ -23,7 +23,7 @@ module.exports = {
       moduleNameMapper: {
         '^@/(.*)$': '<rootDir>/src/$1',
         '^react-native$': '<rootDir>/tests/setup/react-native-mock.js',
-        '\\.\\./\\.\\./\\.\\./modules/mediapipe-pose': '<rootDir>/tests/setup/mediapipe-pose-mock.js',
+        '^.*modules/mediapipe-pose$': '<rootDir>/tests/setup/mediapipe-pose-mock.js',
       },
       globals: {
         __DEV__: true,

@@ -117,6 +117,22 @@ export class MediaPipePoseAdapter implements PoseEngine {
     return { frames, videoResult };
   }
 
+  /**
+   * Process an entire video natively with frame-accurate timestamps.
+   * Satisfies the optional PoseEngine.processVideo contract.
+   */
+  async processVideo(
+    videoUri: string,
+    targetFps: number,
+    maxFrames?: number,
+    onProgress?: (progress: number) => void
+  ): Promise<PoseFrame[]> {
+    onProgress?.(0.1);
+    const { frames } = await this.processVideoNative(videoUri, targetFps, maxFrames);
+    onProgress?.(1.0);
+    return frames;
+  }
+
   dispose(): void {
     mpRelease().catch(() => {});
   }

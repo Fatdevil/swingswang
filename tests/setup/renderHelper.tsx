@@ -86,10 +86,14 @@ function renderFunctionComponent(Component: Function, props: any): any {
 
   // Set the mock dispatcher
   const internals = (React as any).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
-  const prevDispatcher = internals?.ReactCurrentDispatcher?.current;
+  const clientInternals = (React as any).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+  const prevDispatcher = internals?.ReactCurrentDispatcher?.current ?? clientInternals?.H;
   
   if (internals?.ReactCurrentDispatcher) {
     internals.ReactCurrentDispatcher.current = mockDispatcher;
+  }
+  if (clientInternals) {
+    clientInternals.H = mockDispatcher;
   }
 
   let result;
@@ -98,6 +102,9 @@ function renderFunctionComponent(Component: Function, props: any): any {
   } finally {
     if (internals?.ReactCurrentDispatcher && prevDispatcher) {
       internals.ReactCurrentDispatcher.current = prevDispatcher;
+    }
+    if (clientInternals) {
+      clientInternals.H = prevDispatcher;
     }
   }
 

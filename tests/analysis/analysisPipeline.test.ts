@@ -10,6 +10,9 @@ import { VideoMetadata } from '@/types/video';
 import { SwingConfig } from '@/types/swing';
 import { PoseTimeline } from '@/features/timeline/PoseTimeline';
 import { isAnalysisResultV2 } from '@/types/analysisV2';
+import * as PoseEngineFactory from '@/features/pose/PoseEngineFactory';
+import { MockPoseEngine } from '@/features/pose/MockPoseEngine';
+import { getThumbnailAsync } from 'expo-video-thumbnails';
 
 // Mock native Expo modules
 jest.mock('expo-video-thumbnails', () => ({
@@ -103,15 +106,20 @@ describe('runAnalysisPipeline V1 Integration', () => {
     // Invariant 9: Events are detected
     expect(r.events).not.toBeNull();
     expect(r.events?.events.length).toBe(8);
+    expect(r.p1p10Events).toBeDefined();
+    expect(r.p1p10Trace).toBeDefined();
 
     // Invariant 10: Events are in valid temporal order (or correct warnings generated)
     expect(r.events?.temporalOrderValid).toBeDefined();
 
-    // Invariant 11: 6 metrics are calculated for FO view (excludes handDepth)
-    expect(Object.keys(r.metrics).length).toBe(6);
+    // Invariant 11: 9 metrics are calculated for FO view (excludes handDepth)
+    expect(Object.keys(r.metrics).length).toBe(9);
     expect(r.metrics.headMovement).toBeDefined();
     expect(r.metrics.tempo).toBeDefined();
     expect(r.metrics.pelvisSway).toBeDefined();
+    expect(r.metrics.leadArmExtension).toBeDefined();
+    expect(r.metrics.xFactorStretch).toBeDefined();
+    expect(r.metrics.finishBalance).toBeDefined();
     expect(r.metrics.handDepth).toBeUndefined();
 
     // Invariant 12: Confidence summary contains all factors clamped to [0,1]
@@ -219,5 +227,79 @@ describe('runAnalysisPipeline V1 Integration', () => {
       w => w.code === 'VIDEO_TOO_LONG_HARD'
     );
     expect(hasTooLongHard).toBe(false);
+  });
+
+  it('uses native processVideo when available on the pose engine', async () => {
+    (getThumbnailAsync as jest.Mock).mockClear();
+
+    const mockPose = new MockPoseEngine();
+    await mockPose.initialize();
+    const mockFrames = [];
+    for (let i = 0; i < 45; i++) {
+      const f = await mockPose.analyzeFrame('mock.jpg', i / 15, i);
+      if (f) mockFrames.push(f);
+    }
+
+    const mockProcessVideo = jest.fn().mockResolvedValue(mockFrames);
+    const nativeEngine = {
+      name: 'MediaPipe',
+      version: '1.0.0',
+      landmarkCount: 17,
+      initialize: jest.fn().mockResolvedValue(undefined),
+      analyzeFrame: jest.fn(),
+      processVideo: mockProcessVideo,
+      dispose: jest.fn(),
+    };
+
+    const spy = jest.spyOn(PoseEngineFactory, 'createPoseEngine').mockReturnValue(nativeEngine);
+
+    const result = await runAnalysisPipeline(
+      'file://native-video.mp4',
+      mockMetadata,
+      () => {},
+      { mode: 'REAL' },
+      undefined,
+      mockSwingConfig
+    );
+
+    expect(mockProcessVideo).toHaveBeenCalledTimes(1);
+    expect(getThumbnailAsync).not.toHaveBeenCalled();
+    expect(result.analysisResult.pipelineTrace.stages.find(s => s.name === 'extraction')?.inputSummary?.mode).toBe('native_hardware_decoder');
+    expect(result.timeline.frames.length).toBe(mockFrames.length);
+
+    spy.mockRestore();
+  });
+
+  it('falls back to frame extraction when native processVideo throws an error', async () => {
+    (getThumbnailAsync as jest.Mock).mockClear();
+
+    const mockPose = new MockPoseEngine();
+    await mockPose.initialize();
+    const failingNativeEngine = {
+      name: 'MediaPipe',
+      version: '1.0.0',
+      landmarkCount: 17,
+      initialize: jest.fn().mockResolvedValue(undefined),
+      analyzeFrame: (uri: string, ts: number, idx: number, w?: number, h?: number) => mockPose.analyzeFrame(uri, ts, idx, w, h),
+      processVideo: jest.fn().mockRejectedValue(new Error('IOS_VIDEO_NOT_IMPLEMENTED')),
+      dispose: jest.fn(),
+    };
+
+    const spy = jest.spyOn(PoseEngineFactory, 'createPoseEngine').mockReturnValue(failingNativeEngine);
+
+    const result = await runAnalysisPipeline(
+      'file://ios-video.mp4',
+      mockMetadata,
+      () => {},
+      { mode: 'REAL' },
+      undefined,
+      mockSwingConfig
+    );
+
+    expect(failingNativeEngine.processVideo).toHaveBeenCalledTimes(1);
+    expect(getThumbnailAsync).toHaveBeenCalled();
+    expect(result.timeline.frames.length).toBeGreaterThan(0);
+
+    spy.mockRestore();
   });
 });

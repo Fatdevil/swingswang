@@ -20,6 +20,7 @@ import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileNotFoundException
 import java.io.InputStream
 import java.util.concurrent.Executors
@@ -210,44 +211,36 @@ class MediaPipePoseModule : Module() {
                         // Convert YUV Image to Bitmap for MediaPipe
                         val bitmap = yuvImageToBitmap(image, width, height)
                         try {
-                          val rotatedBitmap = applyRotation(bitmap, rotation)
-                          val bitmapToUse = if (rotatedBitmap !== bitmap) {
-                            bitmap.recycle()
-                            rotatedBitmap
-                          } else bitmap
+                          val mpImage = BitmapImageBuilder(bitmap).build()
 
-                          try {
-                            val mpImage = BitmapImageBuilder(bitmapToUse).build()
+                          // Ensure monotonic timestamps (in ms)
+                          val timestampMs = presentationTimeUs / 1000
+                          val safeTimestampMs = if (timestampMs <= lastMonotonicMs) {
+                            lastMonotonicMs + 1
+                          } else timestampMs
 
-                            // Ensure monotonic timestamps (in ms)
-                            val timestampMs = presentationTimeUs / 1000
-                            val safeTimestampMs = if (timestampMs <= lastMonotonicMs) {
-                              lastMonotonicMs + 1
-                            } else timestampMs
-
-                            val inferenceStartNs = SystemClock.elapsedRealtimeNanos()
-                            val poseResult = if (imageProcessingOptions != null) {
-                              landmarker.detectForVideo(mpImage, safeTimestampMs, imageProcessingOptions)
-                            } else {
-                              landmarker.detectForVideo(mpImage, safeTimestampMs)
-                            }
-                            val inferenceDurationMs =
-                              (SystemClock.elapsedRealtimeNanos() - inferenceStartNs) / 1_000_000.0
-
-                            val frameResult = convertSingleResult(
-                              poseResult, safeTimestampMs, inferenceDurationMs
-                            )
-                            results.add(frameResult)
-
-                            lastMonotonicMs = safeTimestampMs
-                            lastProcessedTimeUs = presentationTimeUs
-                            processedFrameCount++
-                          } finally {
-                            if (bitmapToUse !== bitmap) bitmapToUse.recycle()
+                          val inferenceStartNs = SystemClock.elapsedRealtimeNanos()
+                          val poseResult = if (imageProcessingOptions != null) {
+                            landmarker.detectForVideo(mpImage, safeTimestampMs, imageProcessingOptions)
+                          } else {
+                            landmarker.detectForVideo(mpImage, safeTimestampMs)
                           }
+                          val inferenceDurationMs =
+                            (SystemClock.elapsedRealtimeNanos() - inferenceStartNs) / 1_000_000.0
+
+                          val frameResult = convertSingleResult(
+                            poseResult, safeTimestampMs, inferenceDurationMs
+                          )
+                          results.add(frameResult)
+
+                          lastMonotonicMs = safeTimestampMs
+                          lastProcessedTimeUs = presentationTimeUs
+                          processedFrameCount++
                         } catch (e: Exception) {
-                          // Rotation or inference failed for this frame
+                          // Inference failed for this frame
                           decodeDroppedFrameCount++
+                        } finally {
+                          bitmap.recycle()
                         }
                       } finally {
                         image.close()
@@ -445,17 +438,24 @@ class MediaPipePoseModule : Module() {
   private fun readExifRotation(uriString: String): Int {
     return try {
       val uri = Uri.parse(uriString)
-      val path = uri.path ?: return 0
-      val exif = ExifInterface(path)
-      when (exif.getAttributeInt(
-        ExifInterface.TAG_ORIENTATION,
-        ExifInterface.ORIENTATION_NORMAL
-      )) {
-        ExifInterface.ORIENTATION_ROTATE_90 -> 90
-        ExifInterface.ORIENTATION_ROTATE_180 -> 180
-        ExifInterface.ORIENTATION_ROTATE_270 -> 270
-        else -> 0
+      val inputStream = if (uri.scheme == "file" || uri.scheme == null) {
+        val path = uri.path ?: return 0
+        FileInputStream(File(path))
+      } else {
+        context.contentResolver.openInputStream(uri)
       }
+      inputStream?.use { stream ->
+        val exif = ExifInterface(stream)
+        when (exif.getAttributeInt(
+          ExifInterface.TAG_ORIENTATION,
+          ExifInterface.ORIENTATION_NORMAL
+        )) {
+          ExifInterface.ORIENTATION_ROTATE_90 -> 90
+          ExifInterface.ORIENTATION_ROTATE_180 -> 180
+          ExifInterface.ORIENTATION_ROTATE_270 -> 270
+          else -> 0
+        }
+      } ?: 0
     } catch (_: Exception) {
       0
     }

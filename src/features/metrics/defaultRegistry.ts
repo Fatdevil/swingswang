@@ -11,6 +11,9 @@ import { tempoMetric } from './tempo';
 import { pelvisSwayMetric } from './pelvisSway';
 import { kneeFlexMetric } from './kneeFlex';
 import { handDepthMetric } from './handDepth';
+import { leadArmExtensionMetric } from './leadArmExtension';
+import { xFactorStretchMetric } from './xFactorStretch';
+import { finishBalanceMetric } from './finishBalance';
 
 /** Create a MetricRegistry populated with all available V1 metrics. */
 export function createDefaultRegistry(): MetricRegistry {
@@ -27,5 +30,11 @@ export function createDefaultRegistry(): MetricRegistry {
   registry.register(kneeFlexMetric);
   registry.register(handDepthMetric);
 
+  // P1–P10 biomechanical coaching metrics
+  registry.register(leadArmExtensionMetric);
+  registry.register(xFactorStretchMetric);
+  registry.register(finishBalanceMetric);
+
   return registry;
 }
+

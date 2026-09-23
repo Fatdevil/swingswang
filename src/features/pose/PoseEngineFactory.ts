@@ -95,14 +95,14 @@ export function createPoseEngine(config: PoseEngineConfig): PoseEngine {
 
   if (availability.provider === 'MEDIAPIPE_WEB') {
     const { MediaPipeWebPoseEngine } = require('./MediaPipeWebPoseEngine');
-    const variant = config.modelVariant ?? 'lite';
+    const variant = config.modelVariant ?? 'heavy';
     Logger.pose.info(`Creating MediaPipeWebPoseEngine (real mode, variant: ${variant})`);
     return new MediaPipeWebPoseEngine(variant);
   }
 
   if (availability.provider === 'MEDIAPIPE') {
     const { MediaPipePoseAdapter } = require('./MediaPipePoseAdapter');
-    const variant = config.modelVariant ?? 'lite';
+    const variant = config.modelVariant ?? 'heavy';
     Logger.pose.info(`Creating MediaPipePoseAdapter (real mode, variant: ${variant})`);
     return new MediaPipePoseAdapter(variant);
   }

@@ -8,9 +8,9 @@
 import { createDefaultRegistry } from '@/features/metrics/defaultRegistry';
 
 describe('createDefaultRegistry', () => {
-  it('registers all 7 metrics', () => {
+  it('registers all 10 metrics', () => {
     const registry = createDefaultRegistry();
-    expect(registry.getAll().length).toBe(7);
+    expect(registry.getAll().length).toBe(10);
   });
 
   it('includes Phase 0 adapted metrics', () => {
@@ -28,6 +28,13 @@ describe('createDefaultRegistry', () => {
     expect(registry.get('handDepth')).toBeDefined();
   });
 
+  it('includes P1-P10 coaching metrics', () => {
+    const registry = createDefaultRegistry();
+    expect(registry.get('leadArmExtension')).toBeDefined();
+    expect(registry.get('xFactorStretch')).toBeDefined();
+    expect(registry.get('finishBalance')).toBeDefined();
+  });
+
   it('returns DTL metrics for DTL view', () => {
     const registry = createDefaultRegistry();
     const dtlMetrics = registry.getMetricsForView('DTL');
@@ -39,8 +46,11 @@ describe('createDefaultRegistry', () => {
     expect(ids).toContain('tempo');
     expect(ids).toContain('kneeFlex');
     expect(ids).toContain('handDepth');
+    expect(ids).toContain('leadArmExtension');
+    expect(ids).toContain('xFactorStretch');
     // FO-only metrics should not appear
     expect(ids).not.toContain('pelvisSway');
+    expect(ids).not.toContain('finishBalance');
   });
 
   it('returns FO metrics for FO view', () => {
@@ -54,6 +64,9 @@ describe('createDefaultRegistry', () => {
     expect(ids).toContain('tempo');
     expect(ids).toContain('kneeFlex');
     expect(ids).toContain('pelvisSway');
+    expect(ids).toContain('leadArmExtension');
+    expect(ids).toContain('xFactorStretch');
+    expect(ids).toContain('finishBalance');
     // DTL-only metrics should not appear
     expect(ids).not.toContain('handDepth');
   });
@@ -71,5 +84,8 @@ describe('createDefaultRegistry', () => {
     expect(registry.get('pelvisSway')!.version).toBe('1.0.0');
     expect(registry.get('kneeFlex')!.version).toBe('1.0.0');
     expect(registry.get('handDepth')!.version).toBe('1.0.0');
+    expect(registry.get('leadArmExtension')!.version).toBe('1.0.0');
+    expect(registry.get('xFactorStretch')!.version).toBe('1.0.0');
+    expect(registry.get('finishBalance')!.version).toBe('1.0.0');
   });
 });

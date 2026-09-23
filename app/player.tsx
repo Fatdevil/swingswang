@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, useWindowDimensions, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, useWindowDimensions, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { VideoView } from 'expo-video';
 import { useRouter } from 'expo-router';
 import { useAnalysis } from '../src/hooks/useAnalysis';
@@ -17,6 +17,10 @@ import { Badge } from '../src/components/ui/Badge';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
 import { reliabilityColor } from '../src/types/metrics';
 import { reliabilityFromConfidence } from '../src/types/metrics';
+import { P1P10TimelineScrubber } from '../src/components/video/P1P10TimelineScrubber';
+import { P1P10PositionSelector } from '../src/components/video/P1P10PositionSelector';
+import { P1P10InspectorCard } from '../src/components/video/P1P10InspectorCard';
+import { PPosition, POSITIONS } from '../src/features/events/p1p10/types';
 
 const PLAYBACK_RATES = [0.25, 0.5, 1.0];
 
@@ -39,6 +43,33 @@ export default function PlayerScreen() {
   const [rateIndex, setRateIndex] = useState(2); // 1.0x default
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [videoLayout, setVideoLayout] = useState({ width: windowWidth, height: 500 });
+  const [selectedPosition, setSelectedPosition] = useState<PPosition | null>(null);
+
+  const analysisFps = poseTimeline?.analyzedFPS || videoSource?.metadata?.frameRate || 30;
+  const frameDuration = 1 / Math.max(1, analysisFps);
+
+  const p1p10Events = (analysisResult as any)?.p1p10Events;
+
+  const closestPosition = React.useMemo<PPosition | null>(() => {
+    if (!p1p10Events) return null;
+    let bestPos: PPosition | null = null;
+    let minDiff = 0.35;
+
+    for (const pos of POSITIONS) {
+      const evt = p1p10Events[pos];
+      if (evt && evt.timestampMs !== null && evt.status !== 'ABSTAIN') {
+        const timeSec = evt.timestampMs / 1000;
+        const diff = Math.abs(currentTime - timeSec);
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestPos = pos;
+        }
+      }
+    }
+    return bestPos;
+  }, [p1p10Events, currentTime]);
+
+  const activePosition = selectedPosition || closestPosition;
 
   const cycleRate = () => {
     const nextIndex = (rateIndex + 1) % PLAYBACK_RATES.length;
@@ -78,9 +109,11 @@ export default function PlayerScreen() {
           <View style={styles.mockBanner}>
             <Text style={styles.mockBannerIcon}>ℹ️</Text>
             <View style={styles.mockBannerTextContainer}>
-              <Text style={styles.mockBannerTitle}>Simuleringsläge (Webbläsare)</Text>
+              <Text style={styles.mockBannerTitle}>Simuleringsläge (Demoläge)</Text>
               <Text style={styles.mockBannerText}>
-                Du kör i webbläsaren där native AI-moduler (MediaPipe / ExecuTorch) inte kan laddas. En syntetisk testdocka visas för att testa gränssnittet. För skarp analys av din verkliga kropp krävs mobilappen (iOS/Android).
+                {Platform.OS === 'web'
+                  ? 'Du kör i ett läge där skarp AI inte kunde laddas. En syntetisk testdocka visas för att testa gränssnittet. För skarp analys av din verkliga kropp krävs en enhet med MediaPipe.'
+                  : 'Nativ AI-motor är inte tillgänglig i detta utvecklingsbygge. En syntetisk testdocka visas för testning. För skarp analys krävs ett bygge med MediaPipe-biblioteket länkat.'}
               </Text>
             </View>
           </View>
@@ -127,10 +160,13 @@ export default function PlayerScreen() {
 
         {/* Controls */}
         <View style={styles.controls}>
-          {/* Timestamp */}
-          <Text style={styles.timestamp}>
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </Text>
+          {/* Interactive P1–P10 Timeline Scrubber */}
+          <P1P10TimelineScrubber
+            duration={duration}
+            currentTime={currentTime}
+            events={p1p10Events}
+            onSeek={seekTo}
+          />
 
           {/* Transport buttons */}
           <View style={styles.transportRow}>
@@ -142,10 +178,31 @@ export default function PlayerScreen() {
             />
 
             <Button
+              title="◀ 1 ruta"
+              onPress={() => seekTo(Math.max(0, currentTime - frameDuration))}
+              variant="ghost"
+              style={styles.scrubBtn}
+            />
+
+            <Button
               title={isPlaying ? '⏸' : '▶'}
               onPress={togglePlayPause}
               variant="secondary"
               style={styles.transportBtn}
+            />
+
+            <Button
+              title="1 ruta ▶"
+              onPress={() => seekTo(Math.min(duration, currentTime + frameDuration))}
+              variant="ghost"
+              style={styles.scrubBtn}
+            />
+
+            <Button
+              title="+1s ⏩"
+              onPress={() => seekTo(Math.min(duration, currentTime + 1))}
+              variant="ghost"
+              style={styles.scrubBtn}
             />
 
             <Button
@@ -161,17 +218,32 @@ export default function PlayerScreen() {
               variant="ghost"
               style={styles.transportBtn}
             />
-
-            <Button
-              title="+1s ⏩"
-              onPress={() => seekTo(Math.min(duration, currentTime + 1))}
-              variant="ghost"
-              style={styles.scrubBtn}
-            />
           </View>
 
-          {/* Swing Events Quick Jump */}
-          {detectedEvents.length > 0 && (
+          {/* P1–P10 Position Selector or legacy fallback */}
+          {p1p10Events ? (
+            <>
+              <P1P10PositionSelector
+                events={p1p10Events}
+                currentTime={currentTime}
+                selectedPosition={selectedPosition}
+                onSelectPosition={(timeSec, pos) => {
+                  setSelectedPosition(pos);
+                  seekTo(timeSec);
+                }}
+                onSelectAbstained={(pos) => {
+                  setSelectedPosition(pos);
+                }}
+              />
+
+              {activePosition && (
+                <P1P10InspectorCard
+                  position={activePosition}
+                  event={p1p10Events[activePosition]}
+                />
+              )}
+            </>
+          ) : detectedEvents.length > 0 ? (
             <View style={styles.eventsSection}>
               <Text style={styles.sectionLabel}>HÄNDELSER I SVINGEN (SNABBVAL)</Text>
               <View style={styles.eventsRow}>
@@ -193,7 +265,7 @@ export default function PlayerScreen() {
                 })}
               </View>
             </View>
-          )}
+          ) : null}
 
           {/* Frame details */}
           {currentFrame && (
@@ -353,7 +425,7 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
   },
   eventChip: {
-    backgroundColor: COLORS.cardBackground,
+    backgroundColor: COLORS.card,
     borderColor: COLORS.border,
     borderWidth: 1,
     borderRadius: 16,
@@ -361,8 +433,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   eventChipActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
   },
   eventChipText: {
     fontFamily: FONT_FAMILY,

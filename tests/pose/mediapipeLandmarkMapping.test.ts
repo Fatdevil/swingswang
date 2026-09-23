@@ -6,7 +6,8 @@
  * and the adapter's frame conversion logic.
  */
 
-import { MP_TO_COCO_MAPPING, mapMediaPipeResultToFrame } from '@/features/pose/MediaPipePoseAdapter';
+import { MP_TO_COCO_MAPPING, mapMediaPipeResultToFrame, MediaPipePoseAdapter } from '@/features/pose/MediaPipePoseAdapter';
+import * as mp from '../../modules/mediapipe-pose';
 
 /** Local type matching MediaPipeFrameResult from the native module */
 interface MediaPipeFrameResult {
@@ -152,3 +153,62 @@ describe('mapMediaPipeResultToFrame', () => {
     expect(frame.extendedLandmarks).toHaveLength(0);
   });
 });
+
+describe('MediaPipePoseAdapter', () => {
+  it('should initialize and process video natively', async () => {
+    const adapter = new MediaPipePoseAdapter('lite');
+    expect(adapter.name).toBe('MediaPipe');
+    expect(adapter.version).toBe('1.0.0');
+    expect(adapter.landmarkCount).toBe(17);
+
+    const makeLandmark = (x: number, y: number, vis: number = 0.9, pres: number = 0.9) => ({
+      x, y, z: 0.1, visibility: vis, presence: pres,
+    });
+    const make33Landmarks = () => {
+      const lms = [];
+      for (let i = 0; i < 33; i++) {
+        lms.push(makeLandmark(i / 33, i / 33, 0.9, 0.9));
+      }
+      return lms;
+    };
+
+    const mockVideoResult = {
+      frames: [
+        {
+          timestampMs: 0,
+          landmarks: make33Landmarks(),
+          worldLandmarks: make33Landmarks(),
+          inferenceDurationMs: 30,
+        },
+        {
+          timestampMs: 100,
+          landmarks: make33Landmarks(),
+          worldLandmarks: make33Landmarks(),
+          inferenceDurationMs: 28,
+        },
+      ],
+      sourceDurationMs: 200,
+      decodedFrameCount: 2,
+      processedFrameCount: 2,
+      samplingSkippedFrameCount: 0,
+      decodeDroppedFrameCount: 0,
+      modelVariant: 'lite' as const,
+    };
+
+    jest.spyOn(mp, 'processVideo').mockResolvedValue(mockVideoResult as any);
+
+    const progressCallback = jest.fn();
+    const frames = await adapter.processVideo('file://test.mp4', 15, 100, progressCallback);
+
+    expect(mp.processVideo).toHaveBeenCalledWith('file://test.mp4', 'lite', {
+      targetFps: 15,
+      maxFrames: 100,
+    });
+    expect(frames.length).toBe(2);
+    expect(frames[0].timestamp).toBe(0);
+    expect(frames[1].timestamp).toBe(0.1);
+    expect(progressCallback).toHaveBeenCalledWith(0.1);
+    expect(progressCallback).toHaveBeenCalledWith(1.0);
+  });
+});
+

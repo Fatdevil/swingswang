@@ -20,12 +20,12 @@ import { buildTimeline } from '@/features/timeline/timelineBuilder';
 import { PoseTimeline } from '@/features/timeline/PoseTimeline';
 import { ANALYSIS_FRAME_RATE } from '@/constants/config';
 import { Logger, PerformanceTimer } from '@/utils/logger';
-import { normalizeTimestampToRealSeconds } from '@/features/video/slowMotionDetector';
+import { normalizeTimestampToRealSeconds, detectSlowMotion } from '@/features/video/slowMotionDetector';
 
 // V1 features imports
 import { evaluateVideoQuality } from '@/features/quality/VideoQualityEngine';
 import { stabilizePoseTimeline } from '@/features/stabilization/PoseStabilizer';
-import { RuleBasedSwingEventDetectorV1 } from '@/features/events/RuleBasedSwingEventDetectorV1';
+import { P1P10TimelineAdapter, RuleBasedSwingEventDetectorV1 } from '@/features/events';
 import { createDefaultRegistry } from '@/features/metrics/defaultRegistry';
 import { MetricResultV1 } from '@/features/metrics/registry';
 import { SwingConfig } from '@/types/swing';
@@ -96,62 +96,124 @@ export async function runAnalysisPipeline(
       outputSummary: { state: 'initialized' },
     });
 
-    // 2. Extract frames
-    const extStartMs = pipelineTimer.elapsed();
-    onStatus({ type: 'extracting', progress: 0 });
-    const extractionTimer = new PerformanceTimer('stage.extraction');
-    frames = await extractFrames(
-      videoUri,
-      metadata.duration,
-      ANALYSIS_FRAME_RATE,
-      (progress) => onStatus({ type: 'extracting', progress }),
-      isCancelled,
-      timeRange
-    );
-    const extDurationMs = extractionTimer.stop();
-    stageTimings['extraction'] = extDurationMs;
-    stageTraces.push({
-      name: 'extraction',
-      startMs: extStartMs,
-      durationMs: extDurationMs,
-      status: frames.length > 0 ? 'OK' : 'ERROR',
-      inputSummary: { duration: metadata.duration, timeRange },
-      outputSummary: { framesExtracted: frames.length },
-    });
+    // 2. Pose Detection (Native Video when available, otherwise Extract Frames -> Analyze Frame)
+    let poseFrames: any[] = [];
+    let usedNativeVideo = false;
 
-    if (frames.length === 0) {
-      throw new Error('No frames could be extracted from the video.');
+    if (typeof engine.processVideo === 'function') {
+      try {
+        Logger.pose.info('Attempting native video processing pipeline', { engine: engine.name });
+        onStatus({ type: 'analyzing', progress: 0, framesComplete: 0, framesTotal: 0 });
+        const nativeStartMs = pipelineTimer.elapsed();
+        const nativeTimer = new PerformanceTimer('stage.nativePose');
+
+        const rawPoseFrames = await engine.processVideo(
+          videoUri,
+          ANALYSIS_FRAME_RATE,
+          undefined,
+          (progress) => onStatus({
+            type: 'analyzing',
+            progress,
+            framesComplete: 0,
+            framesTotal: 0,
+          })
+        );
+
+        let filteredFrames = rawPoseFrames;
+        if (timeRange) {
+          filteredFrames = rawPoseFrames.filter(
+            f => f.timestamp >= timeRange.startTime && f.timestamp <= timeRange.endTime
+          );
+        }
+
+        const nativeDurationMs = nativeTimer.stop();
+        stageTimings['extraction'] = 0;
+        stageTraces.push({
+          name: 'extraction',
+          startMs: nativeStartMs,
+          durationMs: 0,
+          status: 'OK',
+          inputSummary: { duration: metadata.duration, timeRange, mode: 'native_hardware_decoder' },
+          outputSummary: { framesExtracted: rawPoseFrames.length },
+        });
+
+        stageTimings['pose'] = nativeDurationMs;
+        stageTraces.push({
+          name: 'pose',
+          startMs: nativeStartMs,
+          durationMs: nativeDurationMs,
+          status: filteredFrames.length > 0 ? 'OK' : 'ERROR',
+          inputSummary: { mode: 'native_video' },
+          outputSummary: { trackedFrames: filteredFrames.length },
+        });
+
+        poseFrames = filteredFrames;
+        usedNativeVideo = true;
+      } catch (nativeError) {
+        Logger.pose.warn('Native video processing unavailable or failed; falling back to frame extraction', {
+          error: String(nativeError),
+        });
+      }
     }
 
-    Logger.video.info(`Extracted ${frames.length} frames`);
+    if (!usedNativeVideo) {
+      // 2. Extract frames fallback
+      const extStartMs = pipelineTimer.elapsed();
+      onStatus({ type: 'extracting', progress: 0 });
+      const extractionTimer = new PerformanceTimer('stage.extraction');
+      frames = await extractFrames(
+        videoUri,
+        metadata.duration,
+        ANALYSIS_FRAME_RATE,
+        (progress) => onStatus({ type: 'extracting', progress }),
+        isCancelled,
+        timeRange
+      );
+      const extDurationMs = extractionTimer.stop();
+      stageTimings['extraction'] = extDurationMs;
+      stageTraces.push({
+        name: 'extraction',
+        startMs: extStartMs,
+        durationMs: extDurationMs,
+        status: frames.length > 0 ? 'OK' : 'ERROR',
+        inputSummary: { duration: metadata.duration, timeRange },
+        outputSummary: { framesExtracted: frames.length },
+      });
 
-    // 3. Run pose detection
-    const poseStartMs = pipelineTimer.elapsed();
-    onStatus({ type: 'analyzing', progress: 0, framesComplete: 0, framesTotal: frames.length });
-    const poseTimer = new PerformanceTimer('stage.pose');
-    const poseFrames = await processVideoFrames(
-      frames,
-      engine,
-      (complete, total) => onStatus({
-        type: 'analyzing',
-        progress: complete / total,
-        framesComplete: complete,
-        framesTotal: total,
-      }),
-      isCancelled,
-      metadata.width,
-      metadata.height
-    );
-    const poseDurationMs = poseTimer.stop();
-    stageTimings['pose'] = poseDurationMs;
-    stageTraces.push({
-      name: 'pose',
-      startMs: poseStartMs,
-      durationMs: poseDurationMs,
-      status: poseFrames.length > 0 ? 'OK' : 'ERROR',
-      inputSummary: { frames: frames.length },
-      outputSummary: { trackedFrames: poseFrames.length },
-    });
+      if (frames.length === 0) {
+        throw new Error('No frames could be extracted from the video.');
+      }
+
+      Logger.video.info(`Extracted ${frames.length} frames`);
+
+      // 3. Run pose detection fallback
+      const poseStartMs = pipelineTimer.elapsed();
+      onStatus({ type: 'analyzing', progress: 0, framesComplete: 0, framesTotal: frames.length });
+      const poseTimer = new PerformanceTimer('stage.pose');
+      poseFrames = await processVideoFrames(
+        frames,
+        engine,
+        (complete, total) => onStatus({
+          type: 'analyzing',
+          progress: complete / total,
+          framesComplete: complete,
+          framesTotal: total,
+        }),
+        isCancelled,
+        metadata.width,
+        metadata.height
+      );
+      const poseDurationMs = poseTimer.stop();
+      stageTimings['pose'] = poseDurationMs;
+      stageTraces.push({
+        name: 'pose',
+        startMs: poseStartMs,
+        durationMs: poseDurationMs,
+        status: poseFrames.length > 0 ? 'OK' : 'ERROR',
+        inputSummary: { frames: frames.length },
+        outputSummary: { trackedFrames: poseFrames.length },
+      });
+    }
 
     if (poseFrames.length === 0) {
       throw new Error('No person detected in any frame. Ensure the golfer is visible in the video.');
@@ -172,12 +234,15 @@ export async function runAnalysisPipeline(
 
     // Preserve media file timestamp for video player/overlay synchronization.
     // Calculate realTimestamp for real-world elapsed time (slow-motion tempo and velocity).
-    const speedMultiplier = metadata.slowMotion?.speedMultiplier ?? 1.0;
-    const effectiveAnalysisFps = ANALYSIS_FRAME_RATE * speedMultiplier;
+    const slowMoInfo = metadata.slowMotion ?? detectSlowMotion(analyzedMetadata);
+    const speedMultiplier = slowMoInfo?.speedMultiplier ?? 1.0;
+    const effectiveAnalysisFps = (slowMoInfo?.isSlowMotion && slowMoInfo?.captureFps)
+      ? slowMoInfo.captureFps
+      : (ANALYSIS_FRAME_RATE * speedMultiplier);
     const enrichedPoseFrames = poseFrames.map(f => ({
       ...f,
-      realTimestamp: metadata.slowMotion?.isSlowMotion
-        ? normalizeTimestampToRealSeconds(f.timestamp, metadata.slowMotion)
+      realTimestamp: slowMoInfo?.isSlowMotion
+        ? normalizeTimestampToRealSeconds(f.timestamp, slowMoInfo)
         : f.timestamp,
     }));
 
@@ -226,7 +291,7 @@ export async function runAnalysisPipeline(
     // 7. Detect swing events
     const eventsStartMs = pipelineTimer.elapsed();
     const eventsTimer = new PerformanceTimer('stage.events');
-    const eventDetector = new RuleBasedSwingEventDetectorV1();
+    const eventDetector = new P1P10TimelineAdapter();
     const eventResult = eventDetector.detect(stabilizedTimeline, config);
     const eventsDurationMs = eventsTimer.stop();
     stageTimings['events'] = eventsDurationMs;
@@ -441,6 +506,8 @@ export async function runAnalysisPipeline(
       quality: qualityResult,
       stabilization: stabReport,
       events: eventResult,
+      p1p10Events: (eventResult.p1p10Events as unknown as Record<string, unknown>) ?? null,
+      p1p10Trace: (eventResult.p1p10Trace as unknown as Record<string, unknown>) ?? null,
       metrics,
       confidence: confidenceSummary,
       warnings,

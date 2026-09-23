@@ -34,6 +34,22 @@ export interface PoseEngine {
     height?: number
   ): Promise<PoseFrame | null>;
 
+  /**
+   * Process an entire video natively if supported by provider.
+   * Enables hardware-accelerated decoding and temporal tracking.
+   * @param videoUri - Local file URI to video.
+   * @param targetFps - Desired analysis frame rate.
+   * @param maxFrames - Optional maximum frames to process.
+   * @param onProgress - Optional callback for progress reporting.
+   * @returns Array of detected PoseFrames.
+   */
+  processVideo?(
+    videoUri: string,
+    targetFps: number,
+    maxFrames?: number,
+    onProgress?: (progress: number) => void
+  ): Promise<PoseFrame[]>;
+
   /** Release resources. */
   dispose(): void;
 }

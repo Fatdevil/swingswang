@@ -16,6 +16,8 @@ import { copyToClipboard } from '../src/features/analysis/analysisExporter';
 import { COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY } from '../src/constants/theme';
 import { MetricResult, ReliabilityStatus } from '../src/types/metrics';
 import { MetricResultV1 } from '../src/features/metrics/registry';
+import { POSITIONS } from '../src/features/events/p1p10/types';
+import { P1P10_SWEDISH_NAMES } from '../src/components/video/P1P10PositionSelector';
 
 /** Helper to adapt V1 metrics to V0 structures for MetricResultCard display compatibility. */
 function adaptV1ToV0(metric?: MetricResultV1): MetricResult {
@@ -86,6 +88,8 @@ export default function ResultsScreen() {
 
   const pose = analysisResult.pose;
   const processing = analysisResult.processing;
+  const p1p10Events = (analysisResult as any)?.p1p10Events;
+  const p1p10Trace = (analysisResult as any)?.p1p10Trace;
   const isMockEngine =
     (pose as any)?.engineMode === 'MOCK' ||
     pose?.providerName === 'MockPoseEngine';
@@ -126,7 +130,7 @@ export default function ResultsScreen() {
             <View style={styles.truthGateTextContainer}>
               <Text style={styles.truthGateTitle}>Truth Gate: Syntetisk Testdata (Demoläge)</Text>
               <Text style={styles.truthGateText}>
-                Denna analys kördes med MockPoseEngine i webbläsaren. Resultaten är syntetiska och speglar inte din verkliga sving. Officiell svingpoäng och coachningsråd är därför blockerade tills analys körs med skarp AI.
+                Denna analys kördes med MockPoseEngine. Resultaten är syntetiska och speglar inte din verkliga sving. Officiell svingpoäng och coachningsråd är därför blockerade tills analys körs med skarp AI på en enhet med MediaPipe.
               </Text>
             </View>
           </View>
@@ -143,6 +147,85 @@ export default function ResultsScreen() {
         {metricsList.map((metric) => (
           <MetricResultCard key={metric.metricId} result={metric} />
         ))}
+
+        {/* MediaPipe P1–P10 Swing Positions */}
+        {p1p10Events && (
+          <>
+            <Text style={styles.sectionTitle} accessibilityRole="header">
+              MEDIAPIPE P1–P10 SVINGPOSITIONER
+            </Text>
+            <Card>
+              {POSITIONS.map((pos) => {
+                const evt = p1p10Events[pos];
+                const info = P1P10_SWEDISH_NAMES[pos];
+                const isDetected = evt && evt.status !== 'ABSTAIN' && evt.timestampMs !== null;
+                const isProxy = evt?.status === 'DETECTED_PROXY';
+                const isAbstained = !evt || evt.status === 'ABSTAIN';
+                const timeSec = isDetected ? evt.timestampMs / 1000 : null;
+                const quality = typeof evt?.qualityScore === 'number' ? Math.round(evt.qualityScore * 100) : null;
+
+                return (
+                  <View key={pos} style={styles.p10Row}>
+                    <View style={styles.p10TitleCol}>
+                      <View style={styles.p10TagRow}>
+                        <Text style={styles.p10Tag}>{pos}</Text>
+                        <Text style={styles.p10Name}>{info?.title ?? pos}</Text>
+                      </View>
+                      <Text style={styles.p10Sub}>{info?.subtitle ?? ''}</Text>
+                    </View>
+
+                    <View style={styles.p10BadgeCol}>
+                      {isProxy ? (
+                        <View style={styles.proxyBadge}>
+                          <Text style={styles.proxyBadgeText}>⚡ PROXY</Text>
+                        </View>
+                      ) : isAbstained ? (
+                        <View style={styles.abstainedBadge}>
+                          <Text style={styles.abstainedBadgeText}>AVSTOD</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.exactBadge}>
+                          <Text style={styles.exactBadgeText}>✓ EXAKT</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.p10ValueCol}>
+                      <Text style={styles.p10Time}>{timeSec !== null ? `${timeSec.toFixed(2)}s` : '—'}</Text>
+                      <Text style={styles.p10Score}>{quality !== null ? `${quality}%` : (isAbstained ? '—' : '')}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+
+              {/* Pipeline trace summary */}
+              {p1p10Trace && (
+                <View style={styles.traceSection}>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>S2D Torsoskala</Text>
+                    <Text style={styles.statValue}>
+                      {typeof p1p10Trace.filterParameters?.s2D === 'number'
+                        ? `${(p1p10Trace.filterParameters.s2D * 100).toFixed(1)} cm`
+                        : '—'}
+                    </Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Savitzky–Golay-filter</Text>
+                    <Text style={styles.statValue}>
+                      Ordning {p1p10Trace.filterParameters?.sgOrder ?? 2} ({p1p10Trace.filterParameters?.sgWindowMs ?? 83} ms)
+                    </Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Kamera / Riktning</Text>
+                    <Text style={styles.statValue}>
+                      {p1p10Trace.view === 'DTL' ? 'Down-the-Line' : 'Face-On'} • {p1p10Trace.handedness === 'LEFT' ? 'Vänster' : 'Höger'}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </Card>
+          </>
+        )}
 
         {/* Pose Quality */}
         <Text style={styles.sectionTitle} accessibilityRole="header">POSE QUALITY</Text>
@@ -333,5 +416,100 @@ const styles = StyleSheet.create({
   },
   exportSection: {
     marginTop: SPACING.xl,
+  },
+  p10Row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  p10TitleCol: {
+    flex: 2,
+  },
+  p10TagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  p10Tag: {
+    fontFamily: FONT_FAMILY,
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.bold as any,
+    color: COLORS.textPrimary,
+  },
+  p10Name: {
+    fontFamily: FONT_FAMILY,
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHT.medium as any,
+  },
+  p10Sub: {
+    fontFamily: FONT_FAMILY,
+    fontSize: 9,
+    color: COLORS.textTertiary,
+  },
+  p10BadgeCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  p10ValueCol: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  p10Time: {
+    fontFamily: FONT_FAMILY,
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.bold as any,
+    color: COLORS.textPrimary,
+    fontVariant: ['tabular-nums'],
+  },
+  p10Score: {
+    fontFamily: FONT_FAMILY,
+    fontSize: 9,
+    color: COLORS.textTertiary,
+  },
+  exactBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 3,
+  },
+  exactBadgeText: {
+    fontFamily: FONT_FAMILY,
+    fontSize: 8,
+    color: '#065F46',
+    fontWeight: FONT_WEIGHT.bold as any,
+  },
+  proxyBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 3,
+  },
+  proxyBadgeText: {
+    fontFamily: FONT_FAMILY,
+    fontSize: 8,
+    color: '#B45309',
+    fontWeight: FONT_WEIGHT.bold as any,
+  },
+  abstainedBadge: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 3,
+  },
+  abstainedBadgeText: {
+    fontFamily: FONT_FAMILY,
+    fontSize: 8,
+    color: COLORS.textTertiary,
+    fontWeight: FONT_WEIGHT.medium as any,
+  },
+  traceSection: {
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.08)',
   },
 });

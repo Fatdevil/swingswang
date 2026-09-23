@@ -81,6 +81,11 @@ export interface AnalysisResultV2 {
   readonly confidence: ConfidenceSummary;
   readonly warnings: WarningCollection;
   readonly version: VersionMetadataV2;
+
+  // MediaPipe P1–P10 normative events & trace (v1.0)
+  readonly p1p10Events?: Record<string, unknown> | null;
+  readonly p1p10Trace?: Record<string, unknown> | null;
+
   
   // Migration metadata (only present on migrated records)
   readonly migratedFrom?: {

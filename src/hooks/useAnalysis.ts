@@ -75,6 +75,12 @@ export function useAnalysis() {
         throw new Error('Real pose analysis is unavailable, and mock analysis is disabled in production.');
       }
 
+      if (!availability.available && __DEV__) {
+        Logger.pose.warn(
+          `[DEV ONLY] Real pose engine is unavailable (${availability.reason}). Falling back to MOCK engine for development.`
+        );
+      }
+
       const engineConfig: PoseEngineConfig = {
         mode: availability.available ? 'REAL' : 'MOCK',
       };
