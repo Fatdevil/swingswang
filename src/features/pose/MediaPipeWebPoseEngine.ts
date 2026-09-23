@@ -13,11 +13,50 @@ import { mapPoseOutputToFrame, RawKeypoint } from './landmarkMapper';
 import { MP_TO_COCO_MAPPING } from './MediaPipePoseAdapter';
 import { Logger, PerformanceTimer } from '@/utils/logger';
 
+type WebPoseResult = {
+  landmarks?: Array<Array<{ x: number; y: number; z?: number; visibility?: number; presence?: number }>>;
+};
+
 interface WebPoseLandmarker {
-  detect(image: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement): {
-    landmarks?: Array<Array<{ x: number; y: number; z?: number; visibility?: number; presence?: number }>>;
-  };
+  detect(image: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement): WebPoseResult;
+  detectForVideo(image: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement, timestampMs: number): WebPoseResult;
   close(): void;
+}
+
+/** Gap inserted on the MediaPipe clock when a new, unrelated sequence starts. */
+const NEW_SEQUENCE_GAP_MS = 1000;
+
+/**
+ * Maps media timestamps (seconds) to the strictly increasing millisecond clock
+ * MediaPipe VIDEO mode requires. Consecutive frames keep their real spacing so
+ * the tracker sees true inter-frame timing; a timestamp that does not advance
+ * (a new clip, or a one-off photo analyzed with timestamp 0) starts a new
+ * sequence after a gap instead of throwing.
+ */
+export function createVideoClock(): (timestampSec: number) => number {
+  let lastInputMs = -Infinity;
+  let lastClockMs = -Infinity;
+  // Clock value and media time at the start of the current sequence; anchoring
+  // to it (rather than summing rounded deltas) keeps the clock drift-free.
+  let sequenceStartClockMs = 0;
+  let sequenceStartInputMs = 0;
+
+  return (timestampSec: number) => {
+    const inputMs = timestampSec * 1000;
+    if (inputMs <= lastInputMs) {
+      sequenceStartClockMs = lastClockMs + NEW_SEQUENCE_GAP_MS;
+      sequenceStartInputMs = inputMs;
+    } else if (lastInputMs === -Infinity) {
+      sequenceStartInputMs = inputMs;
+    }
+    const clockMs = Math.max(
+      lastClockMs + 1,
+      sequenceStartClockMs + Math.round(inputMs - sequenceStartInputMs),
+    );
+    lastInputMs = inputMs;
+    lastClockMs = clockMs;
+    return clockMs;
+  };
 }
 
 export class MediaPipeWebPoseEngine implements PoseEngine {
@@ -28,6 +67,7 @@ export class MediaPipeWebPoseEngine implements PoseEngine {
   private modelVariant: MediaPipeModelVariant;
   private landmarker: WebPoseLandmarker | null = null;
   private initialized = false;
+  private nextVideoTimestampMs = createVideoClock();
 
   constructor(modelVariant: MediaPipeModelVariant = 'lite') {
     this.modelVariant = modelVariant;
@@ -60,7 +100,10 @@ export class MediaPipeWebPoseEngine implements PoseEngine {
           modelAssetPath,
           delegate: 'GPU',
         },
-        runningMode: 'IMAGE',
+        // VIDEO mode tracks the golfer from the previous frame's landmarks
+        // instead of re-detecting from scratch each frame, which keeps the
+        // skeleton on the body through the fast, blurred downswing.
+        runningMode: 'VIDEO',
         numPoses: 1,
         minPoseDetectionConfidence: 0.4,
         minPosePresenceConfidence: 0.4,
@@ -74,7 +117,7 @@ export class MediaPipeWebPoseEngine implements PoseEngine {
           modelAssetPath,
           delegate: 'CPU',
         },
-        runningMode: 'IMAGE',
+        runningMode: 'VIDEO',
         numPoses: 1,
         minPoseDetectionConfidence: 0.4,
         minPosePresenceConfidence: 0.4,
@@ -114,7 +157,7 @@ export class MediaPipeWebPoseEngine implements PoseEngine {
       return null;
     }
 
-    const detection = this.landmarker.detect(imageElement);
+    const detection = this.landmarker.detectForVideo(imageElement, this.nextVideoTimestampMs(timestamp));
     const inferenceTimeMs = timer.stop();
 
     if (!detection.landmarks || detection.landmarks.length === 0 || detection.landmarks[0].length === 0) {
