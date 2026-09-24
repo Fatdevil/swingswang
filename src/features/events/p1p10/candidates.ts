@@ -477,11 +477,19 @@ export function generateCandidatesForPosition(
     }
 
     case 'P10': {
-      // P10: Finish: first stable frame in finish plateau (>= 150 ms stable, low body speed)
+      // P10: Finish.
+      // 1. Preferred: first frame of a held finish (>= 150 ms stable, low body speed).
+      // 2. Fallback: highest hand point in the follow-through. Many golfers lower
+      //    the club right away or the clip ends soon after the swing; without the
+      //    fallback P10 was either missed or placed on the rest pose afterwards.
       const searchStart = topIdx + msToFrames(frames, 250, 2);
+      // Finish pose has the hands well above mid-torso; this rejects the rest
+      // pose after the club has been lowered.
+      const handsHigh = (f: ProcessedFrame) => f.grip2D.y > f.midHip.y + 0.5 * s2D;
+
       for (let i = searchStart; i < n - 3; i++) {
         const f = frames[i];
-        if (f.gripSpeed < 0.35 && f.midHipSpeed < 0.20) {
+        if (f.gripSpeed < 0.35 && f.midHipSpeed < 0.20 && handsHigh(f)) {
           // Check duration of stability plateau
           let plateauLengthMs = 0;
           for (let j = i; j < n; j++) {
@@ -521,6 +529,42 @@ export function generateCandidatesForPosition(
               break;
             }
           }
+        }
+      }
+
+      // Fallback candidate: highest grip after the impact region. Scored lower
+      // than a held finish, so the solver only picks it when no plateau exists
+      // (or the plateau candidate violates the sequence constraints).
+      const followStart = Math.max(searchStart, phases.impactApproxFrameIndex ?? searchStart);
+      let peakIdx = -1;
+      for (let i = followStart; i < n; i++) {
+        if (peakIdx < 0 || frames[i].grip2D.y > frames[peakIdx].grip2D.y) peakIdx = i;
+      }
+      if (peakIdx >= 0 && handsHigh(frames[peakIdx]) && !candidates.some(c => c.frameIndex === frames[peakIdx].frameIndex)) {
+        const f = frames[peakIdx];
+        const qL = evaluateLandmarksQuality(f, [
+          LANDMARK_INDEX.LEFT_SHOULDER,
+          LANDMARK_INDEX.RIGHT_SHOULDER,
+          LANDMARK_INDEX.LEFT_WRIST,
+          LANDMARK_INDEX.RIGHT_WRIST,
+        ]);
+        const score = computeQualityScore('P10', qL, 0.80, 0.60, viewFactor);
+        if (score > 0.20) {
+          const truncated = peakIdx >= n - 2;
+          candidates.push({
+            position: 'P10',
+            frameIndex: f.frameIndex,
+            timestampMs: f.timestampMs,
+            score,
+            status: 'DETECTED_PROXY',
+            semantic: SEMANTIC_NAMES.P10.proxy,
+            warnings: truncated ? ['FINISH_NOT_HELD', 'CLIP_TRUNCATED_END'] : ['FINISH_NOT_HELD'],
+            evidence: {
+              method: 'HAND_PEAK',
+              gripHeightAboveHipTorso: (f.grip2D.y - f.midHip.y) / s2D,
+              gripSpeed: f.gripSpeed,
+            },
+          });
         }
       }
       break;
