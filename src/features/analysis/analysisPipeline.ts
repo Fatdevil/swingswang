@@ -14,11 +14,11 @@ import { ProcessingStatus } from '@/types/pose';
 import { VideoMetadata } from '@/types/video';
 import { createPoseEngine } from '@/features/pose/PoseEngineFactory';
 import { PoseEngineConfig } from '@/features/pose/types';
-import { extractFrames } from '@/features/video/frameExtractor';
+import { extractFrames, extractFramesAtTimestamps } from '@/features/video/frameExtractor';
 import { processVideoFrames } from '@/features/pose/poseProcessor';
 import { buildTimeline } from '@/features/timeline/timelineBuilder';
 import { PoseTimeline } from '@/features/timeline/PoseTimeline';
-import { ANALYSIS_FRAME_RATE } from '@/constants/config';
+import { ANALYSIS_FRAME_RATE, SWING_WINDOW_FRAME_RATE } from '@/constants/config';
 import { Logger, PerformanceTimer } from '@/utils/logger';
 import { normalizeTimestampToRealSeconds, detectSlowMotion } from '@/features/video/slowMotionDetector';
 
@@ -26,6 +26,11 @@ import { normalizeTimestampToRealSeconds, detectSlowMotion } from '@/features/vi
 import { evaluateVideoQuality } from '@/features/quality/VideoQualityEngine';
 import { stabilizePoseTimeline } from '@/features/stabilization/PoseStabilizer';
 import { P1P10TimelineAdapter, RuleBasedSwingEventDetectorV1 } from '@/features/events';
+import {
+  detectCoarseSwingWindow,
+  computeRefinementTimestamps,
+  mergePoseFrames,
+} from './swingWindowRefinement';
 import { createDefaultRegistry } from '@/features/metrics/defaultRegistry';
 import { MetricResultV1 } from '@/features/metrics/registry';
 import { SwingConfig } from '@/types/swing';
@@ -239,12 +244,69 @@ export async function runAnalysisPipeline(
     const effectiveAnalysisFps = (slowMoInfo?.isSlowMotion && slowMoInfo?.captureFps)
       ? slowMoInfo.captureFps
       : (ANALYSIS_FRAME_RATE * speedMultiplier);
-    const enrichedPoseFrames = poseFrames.map(f => ({
+    const withRealTimestamps = (fs: any[]) => fs.map(f => ({
       ...f,
       realTimestamp: slowMoInfo?.isSlowMotion
         ? normalizeTimestampToRealSeconds(f.timestamp, slowMoInfo)
         : f.timestamp,
     }));
+
+    // 3b. Densify the swing window to SWING_WINDOW_FRAME_RATE (frame-extraction path only;
+    // native processVideo samples the whole clip at a fixed rate).
+    if (!usedNativeVideo && SWING_WINDOW_FRAME_RATE > ANALYSIS_FRAME_RATE && frames.length > 1) {
+      const refineStartMs = pipelineTimer.elapsed();
+      const refineTimer = new PerformanceTimer('stage.swingWindowRefine');
+      const swingWindow = detectCoarseSwingWindow(
+        withRealTimestamps(poseFrames),
+        config,
+        effectiveAnalysisFps,
+      );
+      const extraTimestamps = swingWindow
+        ? computeRefinementTimestamps(frames.map(f => f.timestamp), swingWindow, SWING_WINDOW_FRAME_RATE)
+        : [];
+
+      let refinedCount = 0;
+      if (extraTimestamps.length > 0) {
+        const extraFrames = await extractFramesAtTimestamps(
+          videoUri,
+          extraTimestamps,
+          undefined,
+          isCancelled,
+        );
+        frames = [...frames, ...extraFrames];
+        const extraPoseFrames = await processVideoFrames(
+          extraFrames,
+          engine,
+          (complete, total) => onStatus({
+            type: 'analyzing',
+            progress: complete / total,
+            framesComplete: complete,
+            framesTotal: total,
+          }),
+          isCancelled,
+          metadata.width,
+          metadata.height
+        );
+        refinedCount = extraPoseFrames.length;
+        poseFrames = mergePoseFrames(poseFrames, extraPoseFrames);
+      }
+
+      const refineDurationMs = refineTimer.stop();
+      stageTimings['swingWindowRefine'] = refineDurationMs;
+      stageTraces.push({
+        name: 'swingWindowRefine',
+        startMs: refineStartMs,
+        durationMs: refineDurationMs,
+        status: 'OK',
+        inputSummary: {
+          window: swingWindow ? `${swingWindow.startTime.toFixed(2)}-${swingWindow.endTime.toFixed(2)}s` : 'none',
+          targetFps: SWING_WINDOW_FRAME_RATE,
+        },
+        outputSummary: { extraFramesRequested: extraTimestamps.length, extraFramesTracked: refinedCount },
+      });
+    }
+
+    const enrichedPoseFrames = withRealTimestamps(poseFrames);
 
     // 4. Build raw timeline for quality checks (using media timestamps for video player sync)
     const rawTimeline = buildTimeline(enrichedPoseFrames, totalVideoFrames, pipelineTimer.elapsed(), effectiveAnalysisFps);

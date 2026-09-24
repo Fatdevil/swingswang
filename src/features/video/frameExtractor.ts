@@ -17,21 +17,10 @@ import { Logger, PerformanceTimer } from '../../utils/logger';
 
 async function extractFramesWeb(
   uri: string,
-  duration: number,
-  safeFrameRate: number,
+  timestamps: readonly number[],
   onProgress?: (progress: number) => void,
-  isCancelled?: () => boolean,
-  timeRange?: { startTime: number; endTime: number }
+  isCancelled?: () => boolean
 ): Promise<FrameData[]> {
-  const safeDuration = Math.min(duration, MAX_ABSOLUTE_DURATION);
-  const intervalSeconds = 1.0 / safeFrameRate;
-  const start = timeRange ? Math.max(0, timeRange.startTime) : 0;
-  const end = timeRange ? Math.min(safeDuration, timeRange.endTime) : safeDuration;
-  const timestamps: number[] = [];
-  for (let t = start; t <= end; t += intervalSeconds) {
-    timestamps.push(t);
-  }
-
   const frames: FrameData[] = [];
 
   try {
@@ -154,16 +143,6 @@ export async function extractFrames(
   }
   const safeFrameRate = Number.isFinite(frameRate) && frameRate > 0 ? frameRate : ANALYSIS_FRAME_RATE;
 
-  const timer = new PerformanceTimer('extractFrames');
-
-  // If running in a web browser environment, use HTML5 video & canvas
-  if (Platform.OS === 'web' && typeof document !== 'undefined') {
-    const frames = await extractFramesWeb(uri, duration, safeFrameRate, onProgress, isCancelled, timeRange);
-    const elapsed = timer.stop();
-    Logger.video.info(`Web frame extraction complete: ${frames.length} frames in ${elapsed.toFixed(0)}ms`);
-    return frames;
-  }
-
   // Enforce absolute maximum duration guardrail
   const safeDuration = Math.min(duration, MAX_ABSOLUTE_DURATION);
 
@@ -178,6 +157,34 @@ export async function extractFrames(
   }
 
   Logger.video.info(`Extracting ${timestamps.length} frames at ${safeFrameRate}fps between ${start.toFixed(1)}s-${end.toFixed(1)}s from ${safeDuration.toFixed(1)}s video (original: ${duration.toFixed(1)}s)`);
+
+  return extractFramesAtTimestamps(uri, timestamps, onProgress, isCancelled);
+}
+
+/**
+ * Extract frames at an explicit list of media timestamps (seconds).
+ * Used by extractFrames and to densify the swing window after a coarse pass.
+ *
+ * @param uri - Local video file URI.
+ * @param timestamps - Media timestamps to extract, in seconds.
+ * @param onProgress - Progress callback (0–1).
+ * @param isCancelled - Optional function returning true if extraction should abort.
+ */
+export async function extractFramesAtTimestamps(
+  uri: string,
+  timestamps: readonly number[],
+  onProgress?: (progress: number) => void,
+  isCancelled?: () => boolean
+): Promise<FrameData[]> {
+  const timer = new PerformanceTimer('extractFrames');
+
+  // If running in a web browser environment, use HTML5 video & canvas
+  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    const frames = await extractFramesWeb(uri, timestamps, onProgress, isCancelled);
+    const elapsed = timer.stop();
+    Logger.video.info(`Web frame extraction complete: ${frames.length} frames in ${elapsed.toFixed(0)}ms`);
+    return frames;
+  }
 
   const frames: FrameData[] = [];
 

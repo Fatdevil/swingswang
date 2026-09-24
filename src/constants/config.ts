@@ -8,6 +8,13 @@
 /** Frame rate used for pose analysis (frames per second of video). */
 export const ANALYSIS_FRAME_RATE = 15;
 
+/**
+ * Frame rate inside the detected swing window (takeaway → finish). The rest of
+ * the clip stays at ANALYSIS_FRAME_RATE; only the in-between frames of the
+ * swing are extracted in a second pass.
+ */
+export const SWING_WINDOW_FRAME_RATE = 30;
+
 /** Maximum recommended video duration in seconds. */
 export const MAX_RECOMMENDED_DURATION = 10;
 

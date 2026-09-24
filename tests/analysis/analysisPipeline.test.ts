@@ -195,10 +195,12 @@ describe('runAnalysisPipeline V1 Integration', () => {
       { startTime: 1.0, endTime: 2.0 }
     );
 
-    // Frame count should be bounded by the trimmed interval (1.0s to 2.0s = ~16 frames)
-    expect(result.timeline.frames.length).toBeLessThan(25);
+    // Frame count should be bounded by the trimmed interval (1.0s to 2.0s = ~16 frames
+    // at 15 fps, up to ~31 where the swing window is densified to 30 fps)
+    expect(result.timeline.frames.length).toBeLessThanOrEqual(32);
     expect(result.timeline.frames.length).toBeGreaterThanOrEqual(14);
     expect(result.timeline.frames[0].timestamp).toBeGreaterThanOrEqual(1.0);
+    expect(result.timeline.frames[result.timeline.frames.length - 1].timestamp).toBeLessThanOrEqual(2.0);
     expect(result.analysisResult.video.duration).toBeCloseTo(1.0, 1);
     expect(result.analysisResult.video.sourceDuration).toBe(mockMetadata.duration);
   });
