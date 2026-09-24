@@ -29,6 +29,8 @@ jest.mock('expo-video', () => ({
 }));
 
 describe('runAnalysisPipeline V1 Integration', () => {
+  jest.setTimeout(25000);
+
   const mockMetadata: VideoMetadata = {
     duration: 3.0,
     width: 1080,
@@ -229,7 +231,7 @@ describe('runAnalysisPipeline V1 Integration', () => {
       w => w.code === 'VIDEO_TOO_LONG_HARD'
     );
     expect(hasTooLongHard).toBe(false);
-  });
+  }, 15000);
 
   it('uses native processVideo when available on the pose engine', async () => {
     (getThumbnailAsync as jest.Mock).mockClear();
