@@ -71,7 +71,13 @@ export function useVideoPlayer(
   }, [player, uri]);
 
   // Pose for the current playback time, interpolated between analyzed frames
-  const currentFrame = timeline?.poseAtTime(currentTime) ?? null;
+  const currentFrame = timeline
+    ? typeof (timeline as any).poseAtTime === 'function'
+      ? (timeline as any).poseAtTime(currentTime)
+      : typeof (timeline as any).frameAtTime === 'function'
+        ? (timeline as any).frameAtTime(currentTime)
+        : null
+    : null;
 
   const togglePlayPause = useCallback(() => {
     if (!player) return;

@@ -27,7 +27,13 @@ export function usePoseOverlay(
 ): UsePoseOverlayReturn {
   const currentFrame = useMemo(() => {
     if (!timeline) return null;
-    return timeline.poseAtTime(currentTime);
+    if (typeof (timeline as any).poseAtTime === 'function') {
+      return (timeline as any).poseAtTime(currentTime);
+    }
+    if (typeof (timeline as any).frameAtTime === 'function') {
+      return (timeline as any).frameAtTime(currentTime);
+    }
+    return null;
   }, [timeline, currentTime]);
 
   return { currentFrame };
